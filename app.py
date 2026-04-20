@@ -13,7 +13,7 @@ from datetime import datetime
 st.set_page_config(page_title="Mesa de Servicio TI - T.R Analytics", layout="wide")
 
 # Logo corporativo (debe estar en assets/logo.png)
-logo_path = Path(__file__).parent / "assets" / "logo.png"
+logo_path = Path(__file__).parent / "assets" / "Logo.jpeg"
 if logo_path.exists():
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
@@ -84,7 +84,7 @@ def get_all_incidents():
 # DETECTOR DE TIPO DE ARCHIVO
 # ==============================
 def detect_file_type(file_path):
-    """Detecta si es SQLite, DAT binario o CSV."""
+    """Detecta si es SQLite, .dat, .bak"""
     with open(file_path, 'rb') as f:
         header = f.read(16)
         if header.startswith(b'SQLite format 3'):
