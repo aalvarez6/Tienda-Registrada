@@ -21,7 +21,7 @@ if logo_path.exists():
 else:
     st.warning("Logo no encontrado. Coloque 'logo.png' en la carpeta 'assets'.")
 
-st.title("📡 Mesa de Servicio Digital Automatizada")
+st.title("Central de Backups ")
 st.markdown("Validación de backups POS (HIOPOS, KF)")
 
 # ==============================
