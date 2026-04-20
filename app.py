@@ -90,33 +90,43 @@ def get_all_incidents():
 
 # ========== FUNCIONES DE DETECCIÓN Y EXTRACCIÓN CONFIGURABLES ==========
 def detect_file_type(file_path):
-    """Detecta si es SQLite, ZIP, KF.dat o CSV."""
-    # SQLite
+    # 1. Intentar como SQLite (para .bak o cualquier archivo)
     try:
         conn = sqlite3.connect(f"file:{file_path}?mode=ro", uri=True)
         conn.close()
         return "sqlite"
     except:
         pass
-    # ZIP
-    if zipfile.is_zipfile(file_path):
-        return "zip"
-    # KF.dat (binario)
-    with open(file_path, 'rb') as f:
-        header = f.read(20)
-        if header.startswith(b'.dat') or header.startswith(b'.dat'):
-            return "kf_dat"
-    # Hipos .bak
-      with open(file_path, 'rb') as f:
-        header = f.read(20)
-        if header.startswith(b'.bak') or header.startswith(b'.bak'):
-            return "HIOPOs_bak"
-    # CSV
-    try:
-        pd.read_csv(file_path, nrows=1)
-        return "csv"
-    except:
-        return "unknown"
+    
+    # 2. Verificar por extensión
+    suffix = Path(file_path).suffix.lower()
+    
+    if suffix == '.zip':
+        if zipfile.is_zipfile(file_path):
+            return "zip"
+    
+    if suffix == '.dat':
+        # Intentar leer como binario KF (cabecera conocida)
+        with open(file_path, 'rb') as f:
+            header = f.read(20)
+            if header.startswith(b'KF_DAT') or header.startswith(b'KFDATA'):
+                return "kf_dat"
+        # Si no tiene cabecera conocida, asumimos binario genérico
+        return "kf_dat"
+    
+    if suffix == '.bak':
+        # Asumimos que es un backup de HIOPOS (podría ser SQLite o binario)
+        # Si no es SQLite, lo tratamos como binario HIOPOS
+        return "hiopos_bak"
+    
+    if suffix == '.csv':
+        try:
+            pd.read_csv(file_path, nrows=1)
+            return "csv"
+        except:
+            pass
+    
+    return "unknown"
 
 def get_sqlite_tables(file_path):
     """Devuelve lista de tablas en una base SQLite."""
