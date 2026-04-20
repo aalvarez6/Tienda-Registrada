@@ -5,19 +5,24 @@ import hashlib
 import struct
 import zipfile
 import tempfile
+import os
 from pathlib import Path
 from datetime import datetime
+
+# ========== CREAR DIRECTORIO DE DATOS ==========
+os.makedirs("data", exist_ok=True)
 
 # ========== CONFIGURACIÓN ==========
 st.set_page_config(page_title="Mesa de Servicio TI - T.R Analytics", layout="wide")
 
+# Logo (opcional)
 logo_path = Path(__file__).parent / "assets" / "logo.png"
 if logo_path.exists():
     col1, col2, col3 = st.columns([1,2,1])
     with col2:
         st.image(str(logo_path), width=250)
 else:
-    st.warning("Logo no encontrado. Coloque 'logo.png' en la carpeta 'assets'.")
+    st.sidebar.info("Logo no encontrado (assets/logo.png)")
 
 st.title("📡 Mesa de Servicio Digital Automatizada")
 st.markdown("Validación de backups POS con regla **ID local vs ID central**")
