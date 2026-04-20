@@ -2,62 +2,69 @@ import streamlit as st
 import pandas as pd
 import sqlite3
 import hashlib
-import tempfile
 import struct
+import zipfile
+import tempfile
 from pathlib import Path
 from datetime import datetime
 
-# ==============================
-# CONFIGURACIÓN DE PÁGINA Y BRANDING
-# ==============================
+# ========== CONFIGURACIÓN ==========
 st.set_page_config(page_title="Mesa de Servicio TI - T.R Analytics", layout="wide")
 
-# Logo corporativo (debe estar en assets/logo.png)
-logo_path = Path(__file__).parent / "assets" / "Logo.jpeg"
+logo_path = Path(__file__).parent / "assets" / "logo.png"
 if logo_path.exists():
-    col1, col2, col3 = st.columns([1, 2, 1])
+    col1, col2, col3 = st.columns([1,2,1])
     with col2:
         st.image(str(logo_path), width=250)
 else:
     st.warning("Logo no encontrado. Coloque 'logo.png' en la carpeta 'assets'.")
 
-st.title("Central de Backups ")
-st.markdown("Validación de backups POS (HIOPOS, KF)")
+st.title("📡 Mesa de Servicio Digital Automatizada")
+st.markdown("Validación de backups POS con regla **ID local vs ID central**")
 
-# ==============================
-# BASE DE DATOS SQLITE
-# ==============================
-DB_PATH = "incidents.db"
+# ========== BASE DE DATOS ==========
+DB_PATH = "data/service_desk.db"
 
 def init_db():
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute('''CREATE TABLE IF NOT EXISTS incidents (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        filename TEXT,
-        file_type TEXT,
-        timestamp TEXT,
-        status TEXT,
-        diagnosis TEXT,
-        recommendation TEXT,
-        hash TEXT
+        filename TEXT, file_type TEXT, timestamp TEXT, status TEXT,
+        diagnosis TEXT, recommendation TEXT, max_local_id INTEGER, hash TEXT
     )''')
     c.execute('''CREATE TABLE IF NOT EXISTS logs (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        incident_id INTEGER,
-        timestamp TEXT,
-        level TEXT,
-        message TEXT
+        id INTEGER PRIMARY KEY AUTOINCREMENT, incident_id INTEGER,
+        timestamp TEXT, level TEXT, message TEXT
     )''')
+    c.execute('''CREATE TABLE IF NOT EXISTS central_reference (
+        key TEXT PRIMARY KEY, value INTEGER
+    )''')
+    c.execute("INSERT OR IGNORE INTO central_reference (key, value) VALUES ('last_central_id', 0)")
     conn.commit()
     conn.close()
 
-def save_incident(filename, file_type, status, diagnosis, recommendation, file_hash):
+def get_last_central_id():
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    c.execute('''INSERT INTO incidents (filename, file_type, timestamp, status, diagnosis, recommendation, hash)
-                 VALUES (?, ?, ?, ?, ?, ?, ?)''',
-              (filename, file_type, datetime.now().isoformat(), status, diagnosis, recommendation, file_hash))
+    c.execute("SELECT value FROM central_reference WHERE key = 'last_central_id'")
+    row = c.fetchone()
+    conn.close()
+    return row[0] if row else 0
+
+def update_central_id(new_id):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("UPDATE central_reference SET value = ? WHERE key = 'last_central_id'", (new_id,))
+    conn.commit()
+    conn.close()
+
+def save_incident(filename, file_type, status, diagnosis, recommendation, max_local_id, file_hash):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute('''INSERT INTO incidents (filename, file_type, timestamp, status, diagnosis, recommendation, max_local_id, hash)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
+              (filename, file_type, datetime.now().isoformat(), status, diagnosis, recommendation, max_local_id, file_hash))
     incident_id = c.lastrowid
     conn.commit()
     conn.close()
@@ -66,224 +73,156 @@ def save_incident(filename, file_type, status, diagnosis, recommendation, file_h
 def save_log(incident_id, level, message):
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    c.execute('''INSERT INTO logs (incident_id, timestamp, level, message)
-                 VALUES (?, ?, ?, ?)''',
+    c.execute("INSERT INTO logs (incident_id, timestamp, level, message) VALUES (?, ?, ?, ?)",
               (incident_id, datetime.now().isoformat(), level, message))
     conn.commit()
     conn.close()
 
 def get_all_incidents():
     conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("SELECT id, filename, file_type, timestamp, status, diagnosis, recommendation FROM incidents ORDER BY timestamp DESC")
-    rows = c.fetchall()
+    df = pd.read_sql_query("SELECT id, filename, file_type, timestamp, status, diagnosis, recommendation FROM incidents ORDER BY timestamp DESC", conn)
     conn.close()
-    return rows
+    return df
 
-# ==============================
-# DETECTOR DE TIPO DE ARCHIVO
-# ==============================
+# ========== DETECCIÓN Y EXTRACCIÓN ==========
 def detect_file_type(file_path):
-    """Detecta si es SQLite, .dat, .bak"""
+    try:
+        conn = sqlite3.connect(f"file:{file_path}?mode=ro", uri=True)
+        conn.close()
+        return "sqlite"
+    except:
+        pass
+    if zipfile.is_zipfile(file_path):
+        return "zip"
     with open(file_path, 'rb') as f:
-        header = f.read(16)
-        if header.startswith(b'SQLite format 3'):
-            return 'sqlite'
-        if header.startswith(b'KF_DAT') or header.startswith(b'HIOPOS'):
-            return 'dat'
-    # Intentar como CSV
+        header = f.read(20)
+        if header.startswith(b'KF_DAT') or header.startswith(b'KFDATA'):
+            return "kf_dat"
     try:
         pd.read_csv(file_path, nrows=1)
-        return 'csv'
+        return "csv"
     except:
-        return 'unknown'
+        return "unknown"
 
-# ==============================
-# VALIDADOR PARA SQLITE (.bak)
-# ==============================
-EXPECTED_TABLES = ['ventas', 'productos', 'inventario', 'tiendas']  # Ajusta según tu POS
-
-def validate_sqlite(file_path):
-    errors = []
-    warnings = []
+def extract_max_local_id(file_path, file_type):
+    errors, warnings = [], []
+    max_id = 0
     try:
-        conn = sqlite3.connect(file_path)
-        cursor = conn.cursor()
-        # Integridad
-        cursor.execute("PRAGMA integrity_check")
-        integrity = cursor.fetchone()[0]
-        if integrity != 'ok':
-            errors.append(f"Integrity check falló: {integrity}")
-        # Tablas esperadas
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
-        existing_tables = [row[0] for row in cursor.fetchall()]
-        missing = [t for t in EXPECTED_TABLES if t not in existing_tables]
-        if missing:
-            errors.append(f"Faltan tablas requeridas: {missing}")
-        # Validar columnas en 'ventas'
-        if 'ventas' in existing_tables:
-            cursor.execute("PRAGMA table_info(ventas)")
-            columns = [col[1] for col in cursor.fetchall()]
-            required_cols = ['fecha', 'tienda_id', 'monto', 'producto_id']
-            missing_cols = [c for c in required_cols if c not in columns]
-            if missing_cols:
-                errors.append(f"Tabla 'ventas' no tiene columnas: {missing_cols}")
-            # Fechas nulas
-            cursor.execute("SELECT COUNT(*) FROM ventas WHERE fecha IS NULL")
-            null_fechas = cursor.fetchone()[0]
-            if null_fechas > 0:
-                warnings.append(f"{null_fechas} registros con fecha NULL en ventas")
-        conn.close()
+        if file_type == "sqlite":
+            conn = sqlite3.connect(file_path)
+            df = pd.read_sql_query("SELECT id_local FROM ventas", conn)
+            conn.close()
+            if not df.empty:
+                max_id = df['id_local'].max()
+        elif file_type == "zip":
+            with zipfile.ZipFile(file_path, 'r') as zf:
+                db_files = [f for f in zf.namelist() if f.endswith('.db')]
+                if db_files:
+                    with tempfile.NamedTemporaryFile(delete=False, suffix='.db') as tmp:
+                        tmp.write(zf.read(db_files[0]))
+                        tmp_path = tmp.name
+                    conn = sqlite3.connect(tmp_path)
+                    df = pd.read_sql_query("SELECT id_local FROM ventas", conn)
+                    conn.close()
+                    Path(tmp_path).unlink()
+                    if not df.empty:
+                        max_id = df['id_local'].max()
+                else:
+                    errors.append("ZIP sin archivo .db")
+        elif file_type == "kf_dat":
+            with open(file_path, 'rb') as f:
+                data = f.read()
+            HEADER_SIZE = 32
+            RECORD_SIZE = 64
+            if len(data) < HEADER_SIZE:
+                errors.append("Archivo demasiado pequeño")
+            else:
+                offset = HEADER_SIZE
+                ids = []
+                while offset + RECORD_SIZE <= len(data):
+                    record = data[offset:offset+RECORD_SIZE]
+                    id_local = struct.unpack('<I', record[0:4])[0]
+                    ids.append(id_local)
+                    offset += RECORD_SIZE
+                if ids:
+                    max_id = max(ids)
+                else:
+                    warnings.append("No se encontraron registros")
+        elif file_type == "csv":
+            df = pd.read_csv(file_path)
+            if 'id_local' in df.columns:
+                max_id = df['id_local'].max()
+            else:
+                errors.append("CSV sin columna 'id_local'")
     except Exception as e:
-        errors.append(f"Error al leer SQLite: {str(e)}")
-    return errors, warnings
+        errors.append(f"Error: {str(e)}")
+    return max_id, errors, warnings
 
-# ==============================
-# VALIDADOR PARA .DAT BINARIO (ejemplo)
-# ==============================
-def validate_dat(file_path):
-    errors = []
-    warnings = []
-    try:
-        with open(file_path, 'rb') as f:
-            data = f.read()
-        if len(data) < 32:
-            errors.append("Archivo demasiado pequeño (menos de 32 bytes)")
-            return errors, warnings
-        magic = data[0:4]
-        if magic not in (b'KFDT', b'HDPD'):
-            errors.append(f"Magic number incorrecto: {magic}")
-        # Checksum simple (byte en posición 4)
-        stored_checksum = data[4]
-        calc_checksum = sum(data[8:]) % 256
-        if stored_checksum != calc_checksum:
-            warnings.append(f"Checksum no coincide (almacenado {stored_checksum}, calculado {calc_checksum})")
-        # Verificar tamaño de registros (suponiendo 128 bytes)
-        record_size = 128
-        header_size = 32
-        if (len(data) - header_size) % record_size != 0:
-            warnings.append(f"Tamaño de datos no es múltiplo de {record_size} bytes")
-    except Exception as e:
-        errors.append(f"Error al leer DAT: {str(e)}")
-    return errors, warnings
-
-# ==============================
-# VALIDADOR CSV (legado)
-# ==============================
-def validate_csv(file_path):
-    errors = []
-    warnings = []
-    try:
-        df = pd.read_csv(file_path)
-        expected_cols = ['fecha', 'tienda_id', 'monto_venta', 'producto', 'cantidad']
-        missing = [c for c in expected_cols if c not in df.columns]
-        if missing:
-            errors.append(f"Faltan columnas: {missing}")
-        if 'fecha' in df.columns:
-            null_fechas = df['fecha'].isna().sum()
-            if null_fechas > 0:
-                warnings.append(f"{null_fechas} fechas nulas")
-        if 'monto_venta' in df.columns:
-            negativos = (df['monto_venta'] < 0).sum()
-            if negativos > 0:
-                warnings.append(f"{negativos} montos negativos")
-    except Exception as e:
-        errors.append(f"Error al leer CSV: {str(e)}")
-    return errors, warnings
-
-# ==============================
-# PROCESADOR PRINCIPAL (AGENTES)
-# ==============================
-def procesar_archivo(file_bytes, original_filename):
-    # 1. Ingesta
+# ========== PROCESAMIENTO PRINCIPAL ==========
+def process_backup(file_bytes, filename):
     file_hash = hashlib.sha256(file_bytes).hexdigest()
-    with tempfile.NamedTemporaryFile(delete=False, suffix=Path(original_filename).suffix) as tmp:
+    with tempfile.NamedTemporaryFile(delete=False, suffix=Path(filename).suffix) as tmp:
         tmp.write(file_bytes)
         tmp_path = tmp.name
 
-    # 2. Detectar tipo
     file_type = detect_file_type(tmp_path)
-    st.info(f"Tipo detectado: {file_type.upper()}")
+    max_local_id, extract_errors, extract_warnings = extract_max_local_id(tmp_path, file_type)
+    central_id = get_last_central_id()
 
-    # 3. Validar según tipo
-    if file_type == 'sqlite':
-        errors, warnings = validate_sqlite(tmp_path)
-    elif file_type == 'dat':
-        errors, warnings = validate_dat(tmp_path)
-    elif file_type == 'csv':
-        errors, warnings = validate_csv(tmp_path)
-    else:
-        errors = ["Tipo de archivo no reconocido (no es SQLite, DAT o CSV válido)"]
-        warnings = []
-
-    # 4. Generar diagnóstico
-    if errors:
+    status, diagnosis, recommendation = "OK", "", ""
+    if extract_errors:
         status = "ERROR"
-        diagnosis = "Errores críticos:\n" + "\n".join(errors)
-        if warnings:
-            diagnosis += "\nAdvertencias:\n" + "\n".join(warnings)
-        recommendation = "Revise la integridad del backup. Consulte al área TI."
-    elif warnings:
-        status = "WARNING"
-        diagnosis = "Advertencias:\n" + "\n".join(warnings)
-        recommendation = "Se recomienda revisar los datos inconsistentes (fechas nulas, checksum, etc.)"
+        diagnosis = "; ".join(extract_errors)
+        recommendation = "Revisar formato del archivo."
     else:
-        status = "OK"
-        diagnosis = "El backup es válido y cumple con las reglas de negocio."
-        recommendation = "Puede proceder con la restauración o sincronización."
+        if max_local_id > central_id:
+            update_central_id(max_local_id)
+            diagnosis = f"ID local ({max_local_id}) > ID central ({central_id}). Base actualizada."
+            recommendation = "Sincronización exitosa."
+            status = "OK"
+        elif max_local_id == central_id:
+            status = "WARNING"
+            diagnosis = f"ID local = central ({central_id}). Sin nuevos datos."
+            recommendation = "No requiere sincronización."
+        else:
+            status = "ALERTA"
+            diagnosis = f"ID local ({max_local_id}) < central ({central_id}). Posible pérdida."
+            recommendation = "¡Sincronizar desde central hacia el POS!"
 
-    # 5. Registrar
-    incident_id = save_incident(original_filename, file_type, status, diagnosis, recommendation, file_hash)
-    save_log(incident_id, "INFO", f"Archivo procesado: {original_filename}")
+    if extract_warnings:
+        diagnosis += "\nAdvertencias: " + "; ".join(extract_warnings)
 
-    # Limpiar
+    incident_id = save_incident(filename, file_type, status, diagnosis, recommendation, max_local_id, file_hash)
+    save_log(incident_id, "INFO", f"Procesado {filename}")
+    if extract_errors:
+        save_log(incident_id, "ERROR", diagnosis)
+    if status == "ALERTA":
+        save_log(incident_id, "CRITICAL", diagnosis)
+
     Path(tmp_path).unlink()
+    return {"status": status, "diagnosis": diagnosis, "recommendation": recommendation,
+            "incident_id": incident_id, "max_local_id": max_local_id, "file_type": file_type}
 
-    return {
-        "status": status,
-        "diagnosis": diagnosis,
-        "recommendation": recommendation,
-        "incident_id": incident_id,
-        "file_type": file_type,
-        "errors": errors,
-        "warnings": warnings
-    }
-
-# ==============================
-# INTERFAZ DE USUARIO (STREAMLIT)
-# ==============================
+# ========== INTERFAZ STREAMLIT ==========
 init_db()
-
 menu = st.sidebar.selectbox("Menú", ["Cargar Backup", "Ver Incidentes"])
 
 if menu == "Cargar Backup":
-    uploaded_file = st.file_uploader(
-        "Seleccione archivo de backup (.bak, .dat, .csv)",
-        type=["bak", "dat", "csv"]
-    )
-    if uploaded_file is not None:
-        with st.spinner("Procesando con agentes..."):
-            result = procesar_archivo(uploaded_file.getvalue(), uploaded_file.name)
-        
-        st.success(f"✅ Estado: {result['status']}")
+    uploaded = st.file_uploader("Seleccione archivo (.dat, .bak, .zip, .csv)", type=["dat", "bak", "zip", "csv"])
+    if uploaded:
+        with st.spinner("Procesando..."):
+            result = process_backup(uploaded.getvalue(), uploaded.name)
+        st.success(f"Estado: {result['status']}")
         st.subheader("Diagnóstico")
-        st.text(result['diagnosis'])
+        st.write(result['diagnosis'])
         st.subheader("Recomendación")
         st.info(result['recommendation'])
-        if result['errors']:
-            with st.expander("Detalle de errores"):
-                st.write(result['errors'])
-        if result['warnings']:
-            with st.expander("Detalle de advertencias"):
-                st.write(result['warnings'])
-        st.caption(f"ID de incidente: {result['incident_id']} | Tipo: {result['file_type']}")
+        st.caption(f"Incidente {result['incident_id']} | Último ID local: {result['max_local_id']} | Tipo: {result['file_type']}")
 
 elif menu == "Ver Incidentes":
-    st.header("📋 Historial de incidentes")
-    incidents = get_all_incidents()
-    if incidents:
-        st.dataframe(
-            [{"ID": i[0], "Archivo": i[1], "Tipo": i[2], "Fecha": i[3], "Estado": i[4], "Diagnóstico": i[5][:100] + "..." if len(i[5])>100 else i[5]} for i in incidents]
-        )
+    st.header("Historial")
+    df = get_all_incidents()
+    if not df.empty:
+        st.dataframe(df)
     else:
-        st.info("No hay incidentes registrados aún.")
+        st.info("Sin incidentes")
