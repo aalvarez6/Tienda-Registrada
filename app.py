@@ -16,7 +16,7 @@ os.makedirs("data", exist_ok=True)
 st.set_page_config(page_title="Mesa de Servicio TI - T.R Analytics", layout="wide")
 
 # Logo (opcional)
-logo_path = Path(__file__).parent / "assets" / "logo.png"
+logo_path = Path(__file__).parent / "assets" / "logo.jpeg"
 if logo_path.exists():
     col1, col2, col3 = st.columns([1,2,1])
     with col2:
@@ -24,7 +24,7 @@ if logo_path.exists():
 else:
     st.sidebar.info("Logo no encontrado (assets/logo.png)")
 
-st.title("📡 Mesa de Servicio Digital Automatizada")
+st.title("📡 Central de BackUps")
 st.markdown("Validación de backups POS con regla **ID local vs ID central**")
 
 # ========== BASE DE DATOS ==========
