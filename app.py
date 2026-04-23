@@ -1,195 +1,257 @@
-# ========== FUNCIONES DE DETECCIÓN Y EXTRACCIÓN ==========
+# app.py
+import streamlit as st
+import pandas as pd
+import os
+from datetime import datetime
+import io
 
-def detect_file_type(file_path):
-    suffix = Path(file_path).suffix.lower()
-    
-    if suffix == '.zip':
-        if zipfile.is_zipfile(file_path):
-            return "zip"
-        return "unknown"
-    
-    if suffix == '.csv':
-        try:
-            pd.read_csv(file_path, nrows=1)
-            return "csv"
-        except:
-            return "unknown"
-    
-    if suffix in ('.db', '.sqlite', '.sqlite3'):
-        try:
-            conn = sqlite3.connect(f"file:{file_path}?mode=ro", uri=True)
-            conn.close()
-            return "sqlite"
-        except:
-            return "unknown"
-    
-    if suffix == '.dat':
-        with open(file_path, 'rb') as f:
-            header = f.read(20)
-            if header.startswith(b'KF_DAT') or header.startswith(b'KFDATA'):
-                return "kf_dat"
-        return "kf_dat"   # asumir binario KF por defecto
-    
-    if suffix == '.bak':
-        return "hiopos_bak"
-    
-    return "unknown"
+# ------------------------------------------------------------
+# CONFIGURACIÓN
+# ------------------------------------------------------------
+USUARIOS_VALIDOS = [
+    "TRCaptura", "Admin1", "UserLog", "SoporteTI", "Operador1",
+    "Analista2", "Gestor3", "CargaDatos", "Supervisor", "Visor"
+]
+CONTRASENA_COMPARTIDA = "TRC1234"
 
-def get_sqlite_tables(file_path):
-    try:
-        conn = sqlite3.connect(file_path)
-        cursor = conn.cursor()
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
-        tables = [row[0] for row in cursor.fetchall()]
-        conn.close()
-        return tables
-    except:
-        return []
+# Rutas de almacenamiento
+BACKUP_PATH = "./backups"
+LOG_PATH = "./data/logs"
+CSV_PATH = "./data/csv"
+EXCEL_REPORTE = "reporte_actividad.xlsx"
 
-def get_columns_from_table(file_path, table_name):
-    try:
-        conn = sqlite3.connect(file_path)
-        cursor = conn.cursor()
-        cursor.execute(f"PRAGMA table_info({table_name})")
-        columns = [row[1] for row in cursor.fetchall()]
-        conn.close()
-        return columns
-    except:
-        return []
+# Crear directorios
+for path in [BACKUP_PATH, LOG_PATH, CSV_PATH,
+             os.path.join(BACKUP_PATH, "bak"),
+             os.path.join(BACKUP_PATH, "dat")]:
+    os.makedirs(path, exist_ok=True)
 
-def extract_max_id_from_sqlite(file_path, table_name, id_column):
-    try:
-        conn = sqlite3.connect(file_path)
-        query = f"SELECT MAX({id_column}) FROM {table_name}"
-        cursor = conn.cursor()
-        cursor.execute(query)
-        result = cursor.fetchone()[0]
-        conn.close()
-        return result if result is not None else 0
-    except Exception as e:
-        raise Exception(f"Error al leer {table_name}.{id_column}: {str(e)}")
+LOG_FILE = os.path.join(LOG_PATH, "logs.txt")
 
-def extract_max_id_from_kf_dat(file_path):
-    with open(file_path, 'rb') as f:
-        data = f.read()
-    HEADER_SIZE = 32
-    RECORD_SIZE = 64
-    if len(data) < HEADER_SIZE:
-        raise Exception("Archivo KF.dat demasiado pequeño")
-    offset = HEADER_SIZE
-    ids = []
-    while offset + RECORD_SIZE <= len(data):
-        record = data[offset:offset+RECORD_SIZE]
-        id_local = struct.unpack('<I', record[0:4])[0]
-        ids.append(id_local)
-        offset += RECORD_SIZE
-    if not ids:
-        raise Exception("No se encontraron registros en el archivo KF.dat")
-    return max(ids)
+# ------------------------------------------------------------
+# FUNCIONES AUXILIARES
+# ------------------------------------------------------------
+def registrar_log(usuario, accion, detalle, estado="OK"):
+    """Escribe en el archivo de log"""
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    entrada = f"[{timestamp}] | USUARIO: {usuario} | ACCIÓN: {accion} | DETALLE: {detalle} | ESTADO: {estado}\n"
+    with open(LOG_FILE, "a", encoding='utf-8') as f:
+        f.write(entrada)
 
-def extract_max_id_from_hiopos_bak(file_path):
-    # Intenta primero como SQLite (algunos .bak lo son)
-    try:
-        conn = sqlite3.connect(f"file:{file_path}?mode=ro", uri=True)
-        conn.close()
-        raise Exception("El archivo .bak es SQLite. Usa modo manual en el sidebar para indicar tabla y columna ID.")
-    except:
-        pass
-    # Si no, asumimos formato binario desconocido
-    raise Exception("Formato .bak de HIOPOS no reconocido. Selecciona 'manual' en el sidebar y especifica tabla/columna (si es SQLite) o cambia a 'binario_kf' si es binario.")
+def validate_file(file_name, file_bytes):
+    """Valida extensión y que no esté vacío"""
+    if len(file_bytes) == 0:
+        return False, "Archivo vacío"
+    ext = os.path.splitext(file_name)[1].lower()
+    if ext == ".bak":
+        return True, "bak"
+    elif ext == ".dat":
+        return True, "dat"
+    return False, "Formato no válido (solo .bak o .dat)"
 
-def extract_max_local_id(file_path, file_type, pos_system, custom_table, custom_column):
-    errors = []
-    warnings = []
-    max_id = 0
+def guardar_archivo(nombre, datos_bytes, store_id, file_type, usuario):
+    """Guarda el archivo en la subcarpeta correspondiente (bak/dat) con timestamp"""
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    nuevo_nombre = f"{store_id}_{timestamp}_{nombre}"
+    target_dir = os.path.join(BACKUP_PATH, file_type)
+    os.makedirs(target_dir, exist_ok=True)
+    ruta = os.path.join(target_dir, nuevo_nombre)
+    with open(ruta, "wb") as f:
+        f.write(datos_bytes)
+    registrar_log(usuario, "FILE_SAVE", f"Guardado {nuevo_nombre} en {file_type}")
+    return ruta
 
-    try:
-        if file_type == "sqlite":
-            tables = get_sqlite_tables(file_path)
-            if not tables:
-                errors.append("La base SQLite no contiene tablas")
-                return max_id, errors, warnings
+def process_bak(ruta, tienda, usuario):
+    """Simulación de procesamiento de backup SQL"""
+    st.info(f"🔧 Procesando BACKUP SQL para tienda {tienda} - Archivo: {ruta}")
+    registrar_log(usuario, "SQL_RESTORE", f"Tienda {tienda} desde {ruta}")
 
-            # Configuración de tabla/columna según sistema
-            if pos_system == "hiopos":
-                candidates = ['ventas', 'transacciones', 'Ventas', 'Transacciones']
-                table_found = None
-                for t in candidates:
-                    if t in tables:
-                        table_found = t
-                        break
-                if not table_found:
-                    errors.append(f"No se encontró tabla de ventas. Tablas disponibles: {tables}")
-                    return max_id, errors, warnings
-                cols = get_columns_from_table(file_path, table_found)
-                id_col = None
-                for col in ['id_local', 'id', 'ID', 'id_venta']:
-                    if col in cols:
-                        id_col = col
-                        break
-                if not id_col:
-                    errors.append(f"Columna ID no encontrada en {table_found}. Columnas: {cols}")
-                    return max_id, errors, warnings
-                max_id = extract_max_id_from_sqlite(file_path, table_found, id_col)
+def process_dat(ruta, tienda, usuario):
+    """Simulación de transformación de DAT a CSV"""
+    st.info(f"🐍 Transformando DAT a CSV para tienda {tienda} - Archivo: {ruta}")
+    # Si se desea generar un CSV real:
+    # df = pd.read_csv(ruta, ...)  # lógica real
+    registrar_log(usuario, "DAT_TRANSFORM", f"Tienda {tienda} en {ruta}")
 
-            elif pos_system == "kf":
-                table_name = custom_table if custom_table else "Ventas"
-                id_column = custom_column if custom_column else "Id"
-                if table_name not in tables:
-                    errors.append(f"Tabla '{table_name}' no encontrada. Tablas: {tables}")
-                    return max_id, errors, warnings
-                max_id = extract_max_id_from_sqlite(file_path, table_name, id_column)
+def actualizar_reporte_excel(usuario, tienda, total_procesados, cant_bak, cant_dat):
+    """Agrega una fila al reporte Excel (si no existe, lo crea)"""
+    nueva_fila = pd.DataFrame([{
+        "Fecha": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "Usuario": usuario,
+        "Tienda": tienda,
+        "Total_Subidos": total_procesados,
+        "Cantidad_BAK": cant_bak,
+        "Cantidad_DAT": cant_dat
+    }])
+    if os.path.exists(EXCEL_REPORTE):
+        df_existente = pd.read_excel(EXCEL_REPORTE, engine='openpyxl')
+        df_nuevo = pd.concat([df_existente, nueva_fila], ignore_index=True)
+    else:
+        df_nuevo = nueva_fila
+    df_nuevo.to_excel(EXCEL_REPORTE, index=False, engine='openpyxl')
 
-            elif pos_system == "manual":
-                if not custom_table or not custom_column:
-                    errors.append("Para modo manual, debe especificar tabla y columna")
-                    return max_id, errors, warnings
-                if custom_table not in tables:
-                    errors.append(f"Tabla '{custom_table}' no encontrada")
-                    return max_id, errors, warnings
-                max_id = extract_max_id_from_sqlite(file_path, custom_table, custom_column)
+# ------------------------------------------------------------
+# INTERFAZ STREAMLIT
+# ------------------------------------------------------------
+st.set_page_config(page_title="Gestor de Backups", layout="wide")
+st.title("📦 Sistema de Procesamiento de Backups (bak / dat)")
+
+# --- Autenticación ---
+if "logged_in" not in st.session_state:
+    st.session_state.logged_in = False
+    st.session_state.usuario_activo = None
+
+if not st.session_state.logged_in:
+    st.subheader("🔐 Acceso restringido")
+    with st.form("login_form"):
+        usuario = st.text_input("Usuario")
+        contrasena = st.text_input("Contraseña", type="password")
+        submitted = st.form_submit_button("Iniciar sesión")
+        if submitted:
+            if usuario in USUARIOS_VALIDOS and contrasena == CONTRASENA_COMPARTIDA:
+                st.session_state.logged_in = True
+                st.session_state.usuario_activo = usuario
+                registrar_log(usuario, "LOGIN", "Acceso exitoso")
+                st.success(f"✅ Bienvenido, {usuario}.")
+                st.rerun()
             else:
-                errors.append(f"Sistema POS '{pos_system}' no soportado para SQLite")
+                st.error("❌ Usuario o contraseña incorrectos.")
+    st.stop()
 
-        elif file_type == "kf_dat":
-            if pos_system == "binario_kf" or pos_system == "kf":
-                max_id = extract_max_id_from_kf_dat(file_path)
-            else:
-                errors.append(f"Archivo .dat detectado pero sistema POS no es 'binario_kf' o 'kf'. Cambia en el sidebar.")
+# --- Sesión iniciada ---
+usuario_actual = st.session_state.usuario_activo
+st.sidebar.success(f"Conectado como: **{usuario_actual}**")
+if st.sidebar.button("Cerrar sesión"):
+    registrar_log(usuario_actual, "LOGOUT", "Cierre de sesión")
+    st.session_state.logged_in = False
+    st.session_state.usuario_activo = None
+    st.rerun()
 
-        elif file_type == "hiopos_bak":
-            if pos_system == "hiopos" or pos_system == "manual":
-                max_id = extract_max_id_from_hiopos_bak(file_path)
-            else:
-                errors.append("Archivo .bak detectado. Selecciona 'hiopos' o 'manual' en el sidebar.")
+# --- Subida de archivos ---
+st.header("📤 Subir archivos")
+uploaded_files = st.file_uploader(
+    "Seleccione uno o varios archivos (.bak / .dat)",
+    type=["bak", "dat"],
+    accept_multiple_files=True
+)
 
-        elif file_type == "zip":
-            with zipfile.ZipFile(file_path, 'r') as zf:
-                db_files = [f for f in zf.namelist() if f.endswith('.db')]
-                if not db_files:
-                    errors.append("El ZIP no contiene archivo .db")
-                    return max_id, errors, warnings
-                with tempfile.NamedTemporaryFile(delete=False, suffix='.db') as tmp:
-                    tmp.write(zf.read(db_files[0]))
-                    tmp_path = tmp.name
-                sub_max, sub_err, sub_warn = extract_max_local_id(tmp_path, "sqlite", pos_system, custom_table, custom_column)
-                max_id = sub_max
-                errors.extend(sub_err)
-                warnings.extend(sub_warn)
-                Path(tmp_path).unlink()
+# Guardar en session_state para persistencia
+if "archivos_subidos" not in st.session_state:
+    st.session_state.archivos_subidos = {}
 
-        elif file_type == "csv":
-            df = pd.read_csv(file_path)
-            id_col = custom_column if custom_column else 'id_local'
-            if id_col not in df.columns:
-                errors.append(f"CSV sin columna '{id_col}'")
-                return max_id, errors, warnings
-            max_id = df[id_col].max()
+if uploaded_files:
+    for file in uploaded_files:
+        key = file.name
+        if key not in st.session_state.archivos_subidos:
+            st.session_state.archivos_subidos[key] = file.getvalue()
+    st.success(f"{len(uploaded_files)} archivo(s) cargado(s).")
 
+# Mostrar resumen de archivos subidos (todos)
+if st.session_state.archivos_subidos:
+    st.subheader("📋 Archivos en espera")
+    resumen = {"bak": 0, "dat": 0, "error": 0}
+    for nombre, datos in st.session_state.archivos_subidos.items():
+        valido, tipo = validate_file(nombre, datos)
+        if valido:
+            resumen[tipo] += 1
         else:
-            errors.append("Tipo de archivo no soportado")
+            resumen["error"] += 1
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Archivos .bak", resumen["bak"])
+    col2.metric("Archivos .dat", resumen["dat"])
+    col3.metric("No soportados", resumen["error"])
+else:
+    st.info("No hay archivos cargados. Use el botón de arriba para subir.")
 
-    except Exception as e:
-        errors.append(f"Excepción: {str(e)}")
+# --- Selección de archivos a procesar ---
+if st.session_state.archivos_subidos:
+    st.subheader("✔️ Seleccione los archivos a procesar")
+    seleccionados = {}
+    for nombre in st.session_state.archivos_subidos.keys():
+        seleccionados[nombre] = st.checkbox(nombre, value=True, key=f"cb_{nombre}")
 
-    return max_id, errors, warnings
+    # ID de tienda (puede ser extraído del nombre o ingresado manualmente)
+    store_id = st.text_input("ID de tienda (se usará como prefijo en guardado)", value="TIENDA_DEFECTO")
+
+    if st.button("🚀 Procesar archivos seleccionados"):
+        archivos_a_procesar = [nom for nom, sel in seleccionados.items() if sel]
+        if not archivos_a_procesar:
+            st.warning("No seleccionó ningún archivo.")
+        else:
+            with st.spinner("Procesando..."):
+                total_procesados = 0
+                contadores = {"bak": 0, "dat": 0}
+                for nombre in archivos_a_procesar:
+                    datos = st.session_state.archivos_subidos[nombre]
+                    valido, tipo = validate_file(nombre, datos)
+                    if not valido:
+                        st.error(f"❌ {nombre}: {tipo} - No se procesará.")
+                        continue
+
+                    # Guardar físicamente
+                    ruta = guardar_archivo(nombre, datos, store_id, tipo, usuario_actual)
+
+                    # Procesar según tipo
+                    if tipo == "bak":
+                        process_bak(ruta, store_id, usuario_actual)
+                        contadores["bak"] += 1
+                    elif tipo == "dat":
+                        process_dat(ruta, store_id, usuario_actual)
+                        contadores["dat"] += 1
+
+                    total_procesados += 1
+                    st.success(f"✅ {nombre} procesado correctamente.")
+
+                # Actualizar reporte Excel
+                actualizar_reporte_excel(usuario_actual, store_id, total_procesados, contadores["bak"], contadores["dat"])
+                st.balloons()
+                st.success(f"🎉 Lote finalizado: {total_procesados} archivos procesados.")
+
+                # Opcional: eliminar los archivos procesados de session_state para no volver a procesarlos
+                for nom in archivos_a_procesar:
+                    if nom in st.session_state.archivos_subidos:
+                        del st.session_state.archivos_subidos[nom]
+                st.rerun()
+
+# --- Visualización de logs y reportes ---
+st.header("📜 Historial y Reportes")
+
+# Mostrar últimas líneas del log
+if os.path.exists(LOG_FILE):
+    with open(LOG_FILE, "r", encoding='utf-8') as f:
+        lines = f.readlines()
+    st.subheader("Últimas entradas del log")
+    st.code("".join(lines[-20:]), language="text")
+else:
+    st.info("Aún no hay actividad registrada.")
+
+# Mostrar reporte Excel (si existe)
+if os.path.exists(EXCEL_REPORTE):
+    st.subheader("📊 Reporte de actividad (Excel)")
+    df_reporte = pd.read_excel(EXCEL_REPORTE, engine='openpyxl')
+    st.dataframe(df_reporte)
+
+    # Botones de descarga
+    col1, col2 = st.columns(2)
+    with col1:
+        # Descargar como Excel
+        output_excel = io.BytesIO()
+        with pd.ExcelWriter(output_excel, engine='openpyxl') as writer:
+            df_reporte.to_excel(writer, index=False)
+        st.download_button(
+            label="📥 Descargar reporte Excel",
+            data=output_excel.getvalue(),
+            file_name="reporte_actividad.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+    with col2:
+        # Descargar como CSV
+        csv = df_reporte.to_csv(index=False, encoding='utf-8-sig')
+        st.download_button(
+            label="📥 Descargar reporte CSV",
+            data=csv,
+            file_name="reporte_actividad.csv",
+            mime="text/csv"
+        )
+else:
+    st.info("Aún no se ha generado ningún reporte. Procese archivos para crearlo.")
