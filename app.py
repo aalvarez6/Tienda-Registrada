@@ -32,7 +32,7 @@ LOG_FILE = os.path.join(LOG_PATH, "logs.txt")
 # FUNCIONES AUXILIARES
 # ------------------------------------------------------------
 def registrar_log(usuario, accion, detalle, estado="OK"):
-    """Escribe en el archivo de log"""
+    """Escribe en el archivo de log (solo para trazabilidad interna)"""
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     entrada = f"[{timestamp}] | USUARIO: {usuario} | ACCIÓN: {accion} | DETALLE: {detalle} | ESTADO: {estado}\n"
     with open(LOG_FILE, "a", encoding='utf-8') as f:
@@ -49,10 +49,10 @@ def validate_file(file_name, file_bytes):
         return True, "dat"
     return False, "Formato no válido (solo .bak o .dat)"
 
-def guardar_archivo(nombre, datos_bytes, store_id, file_type, usuario):
-    """Guarda el archivo en la subcarpeta correspondiente (bak/dat) con timestamp"""
+def guardar_archivo(nombre, datos_bytes, file_type, usuario):
+    """Guarda el archivo en la subcarpeta correspondiente (bak/dat) con timestamp (sin ID tienda)"""
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    nuevo_nombre = f"{store_id}_{timestamp}_{nombre}"
+    nuevo_nombre = f"{timestamp}_{nombre}"
     target_dir = os.path.join(BACKUP_PATH, file_type)
     os.makedirs(target_dir, exist_ok=True)
     ruta = os.path.join(target_dir, nuevo_nombre)
@@ -61,24 +61,21 @@ def guardar_archivo(nombre, datos_bytes, store_id, file_type, usuario):
     registrar_log(usuario, "FILE_SAVE", f"Guardado {nuevo_nombre} en {file_type}")
     return ruta
 
-def process_bak(ruta, tienda, usuario):
+def process_bak(ruta, usuario):
     """Simulación de procesamiento de backup SQL"""
-    st.info(f"🔧 Procesando BACKUP SQL para tienda {tienda} - Archivo: {ruta}")
-    registrar_log(usuario, "SQL_RESTORE", f"Tienda {tienda} desde {ruta}")
+    st.info(f"🔧 Procesando BACKUP SQL - Archivo: {ruta}")
+    registrar_log(usuario, "SQL_RESTORE", f"Archivo: {ruta}")
 
-def process_dat(ruta, tienda, usuario):
+def process_dat(ruta, usuario):
     """Simulación de transformación de DAT a CSV"""
-    st.info(f"🐍 Transformando DAT a CSV para tienda {tienda} - Archivo: {ruta}")
-    # Si se desea generar un CSV real:
-    # df = pd.read_csv(ruta, ...)  # lógica real
-    registrar_log(usuario, "DAT_TRANSFORM", f"Tienda {tienda} en {ruta}")
+    st.info(f"🐍 Transformando DAT a CSV - Archivo: {ruta}")
+    registrar_log(usuario, "DAT_TRANSFORM", f"Archivo: {ruta}")
 
-def actualizar_reporte_excel(usuario, tienda, total_procesados, cant_bak, cant_dat):
-    """Agrega una fila al reporte Excel (si no existe, lo crea)"""
+def actualizar_reporte_excel(usuario, total_procesados, cant_bak, cant_dat):
+    """Agrega una fila al reporte Excel (sin columna Tienda)"""
     nueva_fila = pd.DataFrame([{
         "Fecha": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "Usuario": usuario,
-        "Tienda": tienda,
         "Total_Subidos": total_procesados,
         "Cantidad_BAK": cant_bak,
         "Cantidad_DAT": cant_dat
@@ -94,6 +91,14 @@ def actualizar_reporte_excel(usuario, tienda, total_procesados, cant_bak, cant_d
 # INTERFAZ STREAMLIT
 # ------------------------------------------------------------
 st.set_page_config(page_title="Gestor de Backups", layout="wide")
+
+# Mostrar logo en la barra lateral o cabecera (común)
+logo_path = "Logo.jpeg"
+if os.path.exists(logo_path):
+    st.sidebar.image(logo_path, width=200)
+else:
+    st.sidebar.warning("Logo.jpeg no encontrado. Añade el archivo a la raíz del proyecto.")
+
 st.title("📦 Sistema de Procesamiento de Backups (bak / dat)")
 
 # --- Autenticación ---
@@ -102,6 +107,11 @@ if "logged_in" not in st.session_state:
     st.session_state.usuario_activo = None
 
 if not st.session_state.logged_in:
+    # Mostrar logo también en la zona de login
+    if os.path.exists(logo_path):
+        col1, col2, col3 = st.columns([1,2,1])
+        with col2:
+            st.image(logo_path, width=250)
     st.subheader("🔐 Acceso restringido")
     with st.form("login_form"):
         usuario = st.text_input("Usuario")
@@ -127,7 +137,10 @@ if st.sidebar.button("Cerrar sesión"):
     st.session_state.usuario_activo = None
     st.rerun()
 
-# --- Subida de archivos ---
+# --- Subida de archivos (con logo opcional) ---
+if os.path.exists(logo_path):
+    st.image(logo_path, width=150)
+
 st.header("📤 Subir archivos")
 uploaded_files = st.file_uploader(
     "Seleccione uno o varios archivos (.bak / .dat)",
@@ -146,7 +159,7 @@ if uploaded_files:
             st.session_state.archivos_subidos[key] = file.getvalue()
     st.success(f"{len(uploaded_files)} archivo(s) cargado(s).")
 
-# Mostrar resumen de archivos subidos (todos)
+# Mostrar resumen de archivos subidos
 if st.session_state.archivos_subidos:
     st.subheader("📋 Archivos en espera")
     resumen = {"bak": 0, "dat": 0, "error": 0}
@@ -170,9 +183,6 @@ if st.session_state.archivos_subidos:
     for nombre in st.session_state.archivos_subidos.keys():
         seleccionados[nombre] = st.checkbox(nombre, value=True, key=f"cb_{nombre}")
 
-    # ID de tienda (puede ser extraído del nombre o ingresado manualmente)
-    store_id = st.text_input("ID de tienda (se usará como prefijo en guardado)", value="TIENDA_DEFECTO")
-
     if st.button("🚀 Procesar archivos seleccionados"):
         archivos_a_procesar = [nom for nom, sel in seleccionados.items() if sel]
         if not archivos_a_procesar:
@@ -188,43 +198,41 @@ if st.session_state.archivos_subidos:
                         st.error(f"❌ {nombre}: {tipo} - No se procesará.")
                         continue
 
-                    # Guardar físicamente
-                    ruta = guardar_archivo(nombre, datos, store_id, tipo, usuario_actual)
+                    # Guardar físicamente (sin ID tienda)
+                    ruta = guardar_archivo(nombre, datos, tipo, usuario_actual)
 
                     # Procesar según tipo
                     if tipo == "bak":
-                        process_bak(ruta, store_id, usuario_actual)
+                        process_bak(ruta, usuario_actual)
                         contadores["bak"] += 1
                     elif tipo == "dat":
-                        process_dat(ruta, store_id, usuario_actual)
+                        process_dat(ruta, usuario_actual)
                         contadores["dat"] += 1
 
                     total_procesados += 1
                     st.success(f"✅ {nombre} procesado correctamente.")
 
-                # Actualizar reporte Excel
-                actualizar_reporte_excel(usuario_actual, store_id, total_procesados, contadores["bak"], contadores["dat"])
+                # Actualizar reporte Excel (sin columna Tienda)
+                actualizar_reporte_excel(usuario_actual, total_procesados, contadores["bak"], contadores["dat"])
                 st.balloons()
                 st.success(f"🎉 Lote finalizado: {total_procesados} archivos procesados.")
 
-                # Opcional: eliminar los archivos procesados de session_state para no volver a procesarlos
+                # Eliminar los archivos procesados de session_state
                 for nom in archivos_a_procesar:
                     if nom in st.session_state.archivos_subidos:
                         del st.session_state.archivos_subidos[nom]
                 st.rerun()
 
-# --- Visualización de logs y reportes --
+# --- Reporte (única sección visible, sin historial) ---
+st.header("📊 Reporte de actividad")
 
-# Mostrar reporte Excel (si existe)
 if os.path.exists(EXCEL_REPORTE):
-    st.subheader("📊 Reporte de actividad (Excel)")
     df_reporte = pd.read_excel(EXCEL_REPORTE, engine='openpyxl')
     st.dataframe(df_reporte)
 
     # Botones de descarga
     col1, col2 = st.columns(2)
     with col1:
-        # Descargar como Excel
         output_excel = io.BytesIO()
         with pd.ExcelWriter(output_excel, engine='openpyxl') as writer:
             df_reporte.to_excel(writer, index=False)
@@ -235,7 +243,6 @@ if os.path.exists(EXCEL_REPORTE):
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
     with col2:
-        # Descargar como CSV
         csv = df_reporte.to_csv(index=False, encoding='utf-8-sig')
         st.download_button(
             label="📥 Descargar reporte CSV",
