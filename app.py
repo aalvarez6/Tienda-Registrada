@@ -213,17 +213,7 @@ if st.session_state.archivos_subidos:
                         del st.session_state.archivos_subidos[nom]
                 st.rerun()
 
-# --- Visualización de logs y reportes ---
-st.header("📜 Historial y Reportes")
-
-# Mostrar últimas líneas del log
-if os.path.exists(LOG_FILE):
-    with open(LOG_FILE, "r", encoding='utf-8') as f:
-        lines = f.readlines()
-    st.subheader("Últimas entradas del log")
-    st.code("".join(lines[-20:]), language="text")
-else:
-    st.info("Aún no hay actividad registrada.")
+# --- Visualización de logs y reportes --
 
 # Mostrar reporte Excel (si existe)
 if os.path.exists(EXCEL_REPORTE):
