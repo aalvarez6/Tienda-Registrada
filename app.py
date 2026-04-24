@@ -35,7 +35,6 @@ class AppConfig:
     csv_path: Path = Path("./data/csv")
     excel_reporte: Path = Path("./data/reporte_actividad.xlsx")
     tipos_validos: tuple = (".bak", ".dat", ".zip", ".rar")
-    # Logos diferenciados
     logo_login: str = "LogoBlue.jpeg"
     logo_main: str = "LogoBlack.jpeg"
 
@@ -166,14 +165,14 @@ def exportar_pdf(df: pd.DataFrame, titulo: str) -> Optional[bytes]:
     return buffer.getvalue()
 
 # ============================================================
-# CSS CON AZUL VIBRANTE, FUENTE AVENIR LIGHT Y TAMAÑO +2PT
+# CSS ACTUALIZADO
 # ============================================================
 
 CSS = """
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Avenir+Light&display=swap');
 
-/* Aumento general de tamaño de letra: base 14pt (aprox +2pt sobre 12pt por defecto) */
+/* Fuente principal y tamaño base */
 html, body, [class*="css"], .stApp {
     font-family: 'Avenir Light', 'Avenir', 'Helvetica Neue', sans-serif !important;
     background-color: #0d0f12 !important;
@@ -188,14 +187,14 @@ html, body, [class*="css"], .stApp {
     --bg-card-hover: #1f2535;
     --border:        #2a3040;
     --border-light:  #3a4558;
-    --accent:        #0066FF;      /* AZUL VIBRANTE */
+    --accent:        #0066FF;
     --accent-dim:    #0052CC;
     --accent-glow:   rgba(0,102,255,0.25);
     --accent-light:  #2389FF;
     --success:       #10b981;
     --success-dim:   rgba(16,185,129,0.12);
-    --error:         #ef4444;
-    --error-dim:     rgba(239,68,68,0.12);
+    --error:         #dc2626;
+    --error-dim:     rgba(220,38,38,0.12);
     --info:          #3b82f6;
     --info-dim:      rgba(59,130,246,0.12);
     --text-primary:  #e8eaf0;
@@ -206,65 +205,294 @@ html, body, [class*="css"], .stApp {
     --shadow:        0 2px 12px rgba(0,0,0,0.4);
 }
 
-/* Ajustes específicos de tamaños (aumentados ~0.1rem respecto a versión anterior) */
+/* Ocultar elementos de Streamlit */
 #MainMenu, footer, header, .stDeployButton { display: none !important; }
 .block-container { padding: 1.5rem 2rem 2rem 2rem !important; max-width: 1200px !important; }
 
-.topbar-brand, .topbar-status, .section-header, .metric-label, .metric-value,
-.file-table th, .file-table td, .badge, .login-title, .stButton button,
-.stTextInput label, .stFileUploader label, .stCheckbox label {
-    font-size: 0.85rem !important;  /* ~14px, consistente con 14pt */
+/* Topbar */
+.topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 1rem;
+    margin-bottom: 1.5rem;
 }
-h1, h2, h3, h4, h5, h6 {
-    font-size: 1.2rem !important;
+.topbar-brand {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--accent);
 }
-.stButton > button, .stDownloadButton > button {
-    font-size: 0.8rem !important;
-    padding: 0.5rem 1.2rem !important;
+.topbar-status {
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    color: var(--text-secondary);
 }
-.stDataFrame th, .stDataFrame td {
-    font-size: 0.75rem !important;
+.status-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--success);
+    box-shadow: 0 0 6px var(--success);
+    animation: pulse 2s infinite;
+}
+@keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.4; } }
+
+/* Encabezados de sección (sin números) */
+.section-header {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    border-left: 2px solid var(--accent);
+    padding-left: 0.75rem;
+    margin: 1.5rem 0 1rem;
 }
 
-/* Resto del CSS igual pero con los nuevos colores y fuentes */
-.topbar-brand {
-    color: var(--accent);
-    letter-spacing: 0.2em;
+/* Métricas en línea horizontal (sin wrap) */
+.metric-grid {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    gap: 1px;
+    background: var(--border);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    margin-bottom: 1.5rem;
 }
-.section-header {
-    border-left: 2px solid var(--accent);
+.metric-card {
+    flex: 1 0 160px;
+    background: var(--bg-card);
+    padding: 1rem 1.2rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    transition: background 0.2s;
+}
+.metric-card:hover { background: var(--bg-card-hover); }
+.metric-label {
+    font-family: var(--font-mono);
+    font-size: 0.6rem;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
 }
 .metric-value {
+    font-family: var(--font-mono);
+    font-size: 1.8rem;
+    font-weight: 600;
     color: var(--accent);
+    line-height: 1;
 }
-.badge-dat {
-    background: var(--accent-glow);
-    color: var(--accent-light);
-    border: 1px solid var(--accent);
+.metric-value.green { color: var(--success); }
+.metric-value.red   { color: var(--error); }
+
+/* Tabla de archivos */
+.file-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    margin-bottom: 1.5rem;
 }
-.stButton > button {
-    background: var(--accent) !important;
-    color: #fff !important;
+.file-table thead tr { border-bottom: 1px solid var(--border); }
+.file-table th {
+    text-align: left;
+    font-size: 0.6rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    padding: 0.5rem 0.8rem;
 }
-.stButton > button:hover {
-    background: var(--accent-light) !important;
-    box-shadow: 0 0 20px var(--accent-glow) !important;
+.file-table td {
+    padding: 0.6rem 0.8rem;
+    border-bottom: 1px solid var(--border);
+    color: var(--text-primary);
+}
+.file-table tr:hover td { background: var(--bg-card); }
+
+/* Badges */
+.badge {
+    display: inline-block;
+    font-size: 0.55rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 0.2rem 0.5rem;
+    border-radius: 2px;
+}
+.badge-bak { background: var(--info-dim); color: var(--info); border: 1px solid var(--info); }
+.badge-dat { background: var(--accent-glow); color: var(--accent-light); border: 1px solid var(--accent); }
+.badge-zip, .badge-rar { background: var(--success-dim); color: var(--success); border: 1px solid var(--success); }
+.badge-error { background: var(--error-dim); color: var(--error); border: 1px solid var(--error); }
+
+/* Login */
+.login-wrapper {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+    padding-top: 1rem;
+}
+.login-box {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 2rem;
+    width: 100%;
+    max-width: 420px;
+    margin-top: 1rem;
+}
+.login-title {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 1.5rem;
+    text-align: center;
+}
+.login-divider {
+    height: 1px;
+    background: var(--border);
+    margin: 1.2rem 0;
+}
+
+/* Inputs */
+.stTextInput > div > div > input,
+.stTextInput > div > div > input[type="password"] {
+    background: var(--bg-primary) !important;
+    border: 1px solid var(--border-light) !important;
+    border-radius: var(--radius) !important;
+    color: var(--text-primary) !important;
+    font-family: var(--font-mono) !important;
+    font-size: 0.85rem !important;
+    padding: 0.5rem 0.8rem !important;
 }
 .stTextInput > div > div > input:focus {
     border-color: var(--accent) !important;
     box-shadow: 0 0 0 2px var(--accent-glow) !important;
 }
+.stTextInput label {
+    font-family: var(--font-mono) !important;
+    font-size: 0.6rem !important;
+    letter-spacing: 0.12em !important;
+    text-transform: uppercase !important;
+    color: var(--text-secondary) !important;
+}
+
+/* Botones generales */
+.stButton > button {
+    background: var(--accent) !important;
+    color: #fff !important;
+    border: none !important;
+    border-radius: var(--radius) !important;
+    font-family: var(--font-mono) !important;
+    font-size: 0.7rem !important;
+    font-weight: 600 !important;
+    letter-spacing: 0.12em !important;
+    text-transform: uppercase !important;
+    padding: 0.5rem 1.2rem !important;
+}
+.stButton > button:hover {
+    background: var(--accent-light) !important;
+    box-shadow: 0 0 20px var(--accent-glow) !important;
+    transform: translateY(-1px) !important;
+}
+.stButton > button[kind="secondary"] {
+    background: transparent !important;
+    color: var(--text-secondary) !important;
+    border: 1px solid var(--border-light) !important;
+}
+.stButton > button[kind="secondary"]:hover {
+    border-color: var(--accent) !important;
+    color: var(--accent) !important;
+    background: var(--accent-glow) !important;
+}
+
+/* Botones de descarga (PDF rojo, CSV verde) */
+/* Primer botón de descarga (PDF) en la columna izquierda */
+div:has(> div > div > .stDownloadButton:first-child) button {
+    background: #dc2626 !important;
+}
+div:has(> div > div > .stDownloadButton:first-child) button:hover {
+    background: #ef4444 !important;
+}
+/* Segundo botón de descarga (CSV) en la columna derecha */
+div:has(> div > div > .stDownloadButton:last-child) button {
+    background: #10b981 !important;
+}
+div:has(> div > div > .stDownloadButton:last-child) button:hover {
+    background: #34d399 !important;
+}
+
+/* File uploader */
+.stFileUploader > div {
+    background: var(--bg-card) !important;
+    border: 1px dashed var(--border-light) !important;
+    border-radius: var(--radius) !important;
+}
 .stFileUploader > div:hover { border-color: var(--accent) !important; }
-/* Mantener el resto del diseño idéntico */
+.stFileUploader label {
+    font-family: var(--font-mono) !important;
+    font-size: 0.65rem !important;
+    letter-spacing: 0.1em !important;
+    text-transform: uppercase !important;
+    color: var(--text-secondary) !important;
+}
+
+/* Checkboxes */
+.stCheckbox > label {
+    font-family: var(--font-mono) !important;
+    font-size: 0.78rem !important;
+}
+.stCheckbox > label > span:first-child {
+    border: 1px solid var(--border-light) !important;
+    border-radius: 2px !important;
+}
+
+/* Dataframe */
+.stDataFrame {
+    border: 1px solid var(--border) !important;
+    border-radius: var(--radius) !important;
+}
+.stDataFrame th {
+    background: var(--bg-secondary) !important;
+    font-family: var(--font-mono) !important;
+    font-size: 0.6rem !important;
+    text-transform: uppercase !important;
+}
+.stDataFrame td {
+    font-family: var(--font-mono) !important;
+    font-size: 0.75rem !important;
+    background: var(--bg-card) !important;
+}
+
+/* Sidebar */
+.css-1d391kg, [data-testid="stSidebar"] {
+    background: var(--bg-secondary) !important;
+    border-right: 1px solid var(--border) !important;
+}
+.css-1d391kg * { font-family: var(--font-mono) !important; }
+
+/* Spinner */
+.stSpinner > div { border-top-color: var(--accent) !important; }
 </style>
 """
 
 # ============================================================
-# COMPONENTES UI (se mantienen igual)
+# COMPONENTES UI (con títulos sin números)
 # ============================================================
 
 def render_section_header(texto: str, icono: str = ""):
-    st.markdown(f'<div class="section-header">{icono} {texto}</div>', unsafe_allow_html=True)
+    # Eliminamos el ícono numérico; solo mostramos el texto
+    st.markdown(f'<div class="section-header">{texto}</div>', unsafe_allow_html=True)
 
 def render_metric_grid(metricas: list[dict]):
     cards = ""
@@ -289,10 +517,10 @@ def render_file_table(archivos: dict):
             <td>{nombre}</td>
             <td><span class="badge {clase_badge}">{texto_tipo}</span></td>
             <td>{size_kb} KB</td>
-        </table>"""
+        </tr>"""
     html = f"""
     <table class="file-table">
-        <thead><tr><th>Nombre</th><th>Tipo</th><th>Tamaño</th></tr></thead>
+        <thead><tr><th>Nombre</th><th>Tipo</th><th>Tamaño</th><tr></thead>
         <tbody>{filas}</tbody>
     </table>"""
     st.markdown(html, unsafe_allow_html=True)
@@ -303,7 +531,7 @@ def render_topbar(usuario: str):
     <div class="topbar">
         <div class="topbar-brand">▶ CENTRAL DE BACKUPS  /  SISTEMA TRC</div>
         <div class="topbar-status">
-            <div class="status-dot"></div>
+            <span class="status-dot"></span>
             {usuario.upper()} &nbsp;·&nbsp; {ts}
         </div>
     </div>""", unsafe_allow_html=True)
@@ -331,12 +559,8 @@ def pagina_login():
     st.markdown('<div class="login-wrapper">', unsafe_allow_html=True)
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        # Logo específico para login (LogoBlue.jpeg)
         if os.path.exists(CONFIG.logo_login):
             st.image(CONFIG.logo_login, use_column_width=True)
-        else:
-            # No mostrar nada si no existe el archivo
-            pass
         st.markdown('<div class="login-box">', unsafe_allow_html=True)
         st.markdown('<div class="login-title">ACCESO RESTRINGIDO</div>', unsafe_allow_html=True)
         with st.form("login_form", clear_on_submit=False):
@@ -420,7 +644,7 @@ def pagina_principal():
 
     render_topbar(usuario)
 
-    # Botón de cerrar sesión extra
+    # Botón extra de cerrar sesión
     col_logout, _ = st.columns([1, 5])
     with col_logout:
         if st.button("🚪 CERRAR SESIÓN", type="secondary"):
@@ -434,14 +658,15 @@ def pagina_principal():
                     st.session_state[key] = {}
             st.rerun()
 
-    # Logo principal (LogoBlack.jpeg) en página de subida
+    # Logo principal (negro)
     if os.path.exists(CONFIG.logo_main):
         col_l, col_m, col_r = st.columns([1, 2, 1])
         with col_m:
             st.image(CONFIG.logo_main, use_column_width=True)
         st.markdown("<br>", unsafe_allow_html=True)
 
-    render_section_header("SUBIR ARCHIVOS", "01")
+    # Sección Subir Archivos (sin número)
+    render_section_header("Subir Archivos")
     uploaded_files = st.file_uploader(
         "Arrastre o seleccione archivos (.bak / .dat / .zip / .rar)",
         type=["bak", "dat", "zip", "rar"],
@@ -458,7 +683,7 @@ def pagina_principal():
 
     arch = st.session_state.archivos_subidos
     if arch:
-        render_section_header("COLA DE PROCESO", "02")
+        render_section_header("Cola de Proceso")
         n_bak = sum(1 for n,d in arch.items() if validate_file(n,d)[1]=="bak")
         n_dat = sum(1 for n,d in arch.items() if validate_file(n,d)[1]=="dat")
         n_comp = sum(1 for n,d in arch.items() if validate_file(n,d)[1] in ["zip","rar"])
@@ -474,8 +699,7 @@ def pagina_principal():
         ])
         render_file_table(arch)
 
-        render_section_header("SELECCIÓN DE ARCHIVOS", "03")
-        # Botón LIMPIAR COLA restaurado
+        render_section_header("Selección de Archivos")
         col_sel, col_clear = st.columns([4, 1])
         with col_clear:
             if st.button("LIMPIAR COLA", type="secondary"):
@@ -537,14 +761,15 @@ def pagina_principal():
         </div>""", unsafe_allow_html=True)
 
     if st.session_state.get("resultados_proceso"):
-        render_section_header("RESULTADO DEL ÚLTIMO LOTE", "04")
+        render_section_header("Resultado del Último Lote")
         for r in st.session_state.resultados_proceso:
             if r["estado"] == "OK":
                 st.success(f"✓ {r['archivo']}")
             else:
                 st.error(f"✗ {r['archivo']} — {r['detalle']}")
 
-    render_section_header("REPORTE DE ACTIVIDAD", "05")
+    # Reporte de actividad con métricas horizontales
+    render_section_header("Reporte de Actividad")
     df_reporte = leer_reporte(usuario)
     if df_reporte is not None and not df_reporte.empty:
         total_registros = len(df_reporte)
@@ -559,7 +784,7 @@ def pagina_principal():
         ])
         st.dataframe(df_reporte.sort_values("Fecha", ascending=False), use_container_width=True, hide_index=True)
 
-        col_dl1, col_dl2, _ = st.columns([1,1,2])
+        col_dl1, col_dl2, _ = st.columns([1, 1, 2])
         if REPORTLAB_DISPONIBLE:
             pdf_bytes = exportar_pdf(df_reporte, f"Reporte Actividad - {usuario}")
             if pdf_bytes:
