@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from typing import Optional
 import hashlib
 
-# Intentar importar reportlab (si no está, solo se desactiva PDF)
+# Intentar importar reportlab, si falla se deshabilita PDF (sin warning global)
 try:
     from reportlab.lib.pagesizes import letter
     from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
@@ -70,8 +70,6 @@ def registrar_log(usuario: str, accion: str, detalle: str, estado: str = "OK"):
         f.write(entrada)
 
 def verificar_credenciales(usuario: str, contrasena: str) -> bool:
-    if not usuario or not contrasena:
-        return False
     hash_input = hashlib.sha256(contrasena.encode()).hexdigest()
     return usuario in CONFIG.usuarios_validos and hash_input == CONFIG.contrasena_hash
 
@@ -139,7 +137,13 @@ def exportar_pdf(df: pd.DataFrame, titulo: str) -> Optional[bytes]:
     doc = SimpleDocTemplate(buffer, pagesize=letter, topMargin=0.5*inch, bottomMargin=0.5*inch)
     story = []
     styles = getSampleStyleSheet()
-    title_style = ParagraphStyle('TitleStyle', parent=styles['Heading1'], fontSize=14, alignment=1, spaceAfter=12)
+    title_style = ParagraphStyle(
+        'TitleStyle',
+        parent=styles['Heading1'],
+        fontSize=14,
+        alignment=1,
+        spaceAfter=12
+    )
     story.append(Paragraph(titulo, title_style))
     story.append(Spacer(1, 12))
     data = [df.columns.tolist()] + df.values.tolist()
@@ -160,7 +164,7 @@ def exportar_pdf(df: pd.DataFrame, titulo: str) -> Optional[bytes]:
     return buffer.getvalue()
 
 # ============================================================
-# CSS (diseño profesional)
+# CSS (sin caracteres extraños en el login)
 # ============================================================
 
 CSS = """
@@ -185,9 +189,11 @@ CSS = """
     --info-dim:      rgba(59,130,246,0.12);
     --text-primary:  #e8eaf0;
     --text-secondary:#8b95a8;
+    --text-mono:     #a8c0d8;
     --font-sans:     'IBM Plex Sans', sans-serif;
     --font-mono:     'IBM Plex Mono', monospace;
     --radius:        6px;
+    --shadow:        0 2px 12px rgba(0,0,0,0.4);
 }
 
 html, body, [class*="css"], .stApp {
@@ -198,7 +204,6 @@ html, body, [class*="css"], .stApp {
 #MainMenu, footer, header, .stDeployButton { display: none !important; }
 .block-container { padding: 1.5rem 2rem 2rem 2rem !important; max-width: 1200px !important; }
 
-/* Topbar */
 .topbar {
     display: flex;
     align-items: center;
@@ -216,22 +221,22 @@ html, body, [class*="css"], .stApp {
     color: var(--accent);
 }
 .topbar-status {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
     font-family: var(--font-mono);
     font-size: 0.65rem;
     color: var(--text-secondary);
 }
 .status-dot {
-    display: inline-block;
     width: 6px; height: 6px;
     border-radius: 50%;
     background: var(--success);
     box-shadow: 0 0 6px var(--success);
     animation: pulse 2s infinite;
-    margin-right: 0.5rem;
 }
 @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.4; } }
 
-/* Secciones */
 .section-header {
     font-family: var(--font-mono);
     font-size: 0.65rem;
@@ -244,7 +249,6 @@ html, body, [class*="css"], .stApp {
     margin: 1.5rem 0 1rem;
 }
 
-/* Tarjetas de métricas */
 .metric-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
@@ -258,7 +262,12 @@ html, body, [class*="css"], .stApp {
 .metric-card {
     background: var(--bg-card);
     padding: 1rem 1.2rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    transition: background 0.2s;
 }
+.metric-card:hover { background: var(--bg-card-hover); }
 .metric-label {
     font-family: var(--font-mono);
     font-size: 0.6rem;
@@ -276,7 +285,6 @@ html, body, [class*="css"], .stApp {
 .metric-value.green { color: var(--success); }
 .metric-value.red   { color: var(--error); }
 
-/* Tabla de archivos */
 .file-table {
     width: 100%;
     border-collapse: collapse;
@@ -284,17 +292,21 @@ html, body, [class*="css"], .stApp {
     font-size: 0.78rem;
     margin-bottom: 1.5rem;
 }
+.file-table thead tr { border-bottom: 1px solid var(--border); }
 .file-table th {
     text-align: left;
     font-size: 0.6rem;
+    letter-spacing: 0.12em;
     text-transform: uppercase;
     color: var(--text-secondary);
     padding: 0.5rem 0.8rem;
-    border-bottom: 1px solid var(--border);
+    font-weight: 500;
 }
 .file-table td {
     padding: 0.6rem 0.8rem;
     border-bottom: 1px solid var(--border);
+    color: var(--text-primary);
+    vertical-align: middle;
 }
 .file-table tr:hover td { background: var(--bg-card); }
 .badge {
@@ -311,13 +323,12 @@ html, body, [class*="css"], .stApp {
 .badge-zip, .badge-rar { background: var(--success-dim); color: var(--success); border: 1px solid var(--success); }
 .badge-error { background: var(--error-dim); color: var(--error); border: 1px solid var(--error); }
 
-/* Login */
 .login-wrapper {
     display: flex;
-    justify-content: center;
+    flex-direction: column;
     align-items: center;
-    min-height: 80vh;
     width: 100%;
+    padding-top: 1rem;
 }
 .login-box {
     background: var(--bg-card);
@@ -326,7 +337,7 @@ html, body, [class*="css"], .stApp {
     padding: 2rem;
     width: 100%;
     max-width: 420px;
-    margin: 0 auto;
+    margin-top: 1rem;
 }
 .login-title {
     font-family: var(--font-mono);
@@ -335,8 +346,8 @@ html, body, [class*="css"], .stApp {
     letter-spacing: 0.2em;
     text-transform: uppercase;
     color: var(--accent);
+    margin-bottom: 1.5rem;
     text-align: center;
-    margin-bottom: 1.8rem;
 }
 .login-divider {
     height: 1px;
@@ -344,7 +355,6 @@ html, body, [class*="css"], .stApp {
     margin: 1.2rem 0;
 }
 
-/* Inputs */
 .stTextInput > div > div > input,
 .stTextInput > div > div > input[type="password"] {
     background: var(--bg-primary) !important;
@@ -355,6 +365,10 @@ html, body, [class*="css"], .stApp {
     font-size: 0.85rem !important;
     padding: 0.5rem 0.8rem !important;
 }
+.stTextInput > div > div > input:focus {
+    border-color: var(--accent) !important;
+    box-shadow: 0 0 0 2px var(--accent-glow) !important;
+}
 .stTextInput label {
     font-family: var(--font-mono) !important;
     font-size: 0.6rem !important;
@@ -363,7 +377,6 @@ html, body, [class*="css"], .stApp {
     color: var(--text-secondary) !important;
 }
 
-/* Botones */
 .stButton > button {
     background: var(--accent) !important;
     color: #000 !important;
@@ -379,6 +392,7 @@ html, body, [class*="css"], .stApp {
 .stButton > button:hover {
     background: #fbbf24 !important;
     box-shadow: 0 0 20px var(--accent-glow) !important;
+    transform: translateY(-1px) !important;
 }
 .stButton > button[kind="secondary"] {
     background: transparent !important;
@@ -391,24 +405,67 @@ html, body, [class*="css"], .stApp {
     background: var(--accent-glow) !important;
 }
 
-/* Sidebar */
-[data-testid="stSidebar"] {
+.stFileUploader > div {
+    background: var(--bg-card) !important;
+    border: 1px dashed var(--border-light) !important;
+    border-radius: var(--radius) !important;
+}
+.stFileUploader > div:hover { border-color: var(--accent) !important; }
+.stFileUploader label {
+    font-family: var(--font-mono) !important;
+    font-size: 0.65rem !important;
+    letter-spacing: 0.1em !important;
+    text-transform: uppercase !important;
+    color: var(--text-secondary) !important;
+}
+
+.stCheckbox > label {
+    font-family: var(--font-mono) !important;
+    font-size: 0.78rem !important;
+}
+.stCheckbox > label > span:first-child {
+    border: 1px solid var(--border-light) !important;
+    border-radius: 2px !important;
+}
+
+.stDataFrame {
+    border: 1px solid var(--border) !important;
+    border-radius: var(--radius) !important;
+}
+.stDataFrame th {
+    background: var(--bg-secondary) !important;
+    font-family: var(--font-mono) !important;
+    font-size: 0.6rem !important;
+    text-transform: uppercase !important;
+}
+.stDataFrame td {
+    font-family: var(--font-mono) !important;
+    font-size: 0.75rem !important;
+    background: var(--bg-card) !important;
+}
+
+.css-1d391kg, [data-testid="stSidebar"] {
     background: var(--bg-secondary) !important;
     border-right: 1px solid var(--border) !important;
 }
-[data-testid="stSidebar"] * {
-    font-family: var(--font-mono) !important;
-}
+.css-1d391kg * { font-family: var(--font-mono) !important; }
 
-/* Otros */
-.stFileUploader > div { background: var(--bg-card) !important; border: 1px dashed var(--border-light) !important; }
-.stDataFrame { border: 1px solid var(--border) !important; border-radius: var(--radius) !important; }
-.stDownloadButton > button { background: transparent !important; border: 1px solid var(--border-light) !important; color: var(--text-secondary) !important; }
+.stSpinner > div { border-top-color: var(--accent) !important; }
+.stDownloadButton > button {
+    background: transparent !important;
+    border: 1px solid var(--border-light) !important;
+    color: var(--text-secondary) !important;
+}
+.stDownloadButton > button:hover {
+    border-color: var(--success) !important;
+    color: var(--success) !important;
+    background: var(--success-dim) !important;
+}
 </style>
 """
 
 # ============================================================
-# COMPONENTES UI (español)
+# COMPONENTES UI REUTILIZABLES (en español)
 # ============================================================
 
 def render_section_header(texto: str, icono: str = ""):
@@ -430,12 +487,12 @@ def render_file_table(archivos: dict):
     for nombre, datos in archivos.items():
         valido, tipo = validate_file(nombre, datos)
         size_kb = round(len(datos) / 1024, 1)
-        clase = f"badge-{tipo}" if valido else "badge-error"
+        clase_badge = f"badge-{tipo}" if valido else "badge-error"
         texto_tipo = tipo.upper() if valido else "ERR"
         filas += f"""
         <tr>
             <td>{nombre}</td>
-            <td><span class="badge {clase}">{texto_tipo}</span></td>
+            <td><span class="badge {clase_badge}">{texto_tipo}</span></td>
             <td>{size_kb} KB</td>
         </tr>"""
     html = f"""
@@ -451,7 +508,8 @@ def render_topbar(usuario: str):
     <div class="topbar">
         <div class="topbar-brand">▶ CENTRAL DE BACKUPS  /  SISTEMA TRC</div>
         <div class="topbar-status">
-            <span class="status-dot"></span> {usuario.upper()} &nbsp;·&nbsp; {ts}
+            <div class="status-dot"></div>
+            {usuario.upper()} &nbsp;·&nbsp; {ts}
         </div>
     </div>""", unsafe_allow_html=True)
 
@@ -471,61 +529,52 @@ def init_session():
             st.session_state[k] = v
 
 # ============================================================
-# PÁGINA DE LOGIN (corregida)
+# PÁGINAS
 # ============================================================
 
 def pagina_login():
     st.markdown('<div class="login-wrapper">', unsafe_allow_html=True)
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        # Logo centrado
         if os.path.exists(CONFIG.logo_path):
             st.image(CONFIG.logo_path, use_column_width=True)
-        else:
-            st.warning("Logo no encontrado. Asegúrate de que 'LogoBlack.jpeg' esté en la raíz.")
-        
         st.markdown('<div class="login-box">', unsafe_allow_html=True)
-        st.markdown('<div class="login-title">⬡ ACCESO RESTRINGIDO ⬡</div>', unsafe_allow_html=True)
-        
-        with st.form("login_form"):
-            usuario = st.text_input("Usuario", placeholder="Ej: Admin, Captura1...")
-            contrasena = st.text_input("Contraseña", type="password", placeholder="Contraseña compartida")
+        st.markdown('<div class="login-title">ACCESO RESTRINGIDO</div>', unsafe_allow_html=True)
+        with st.form("login_form", clear_on_submit=False):
+            usuario = st.text_input("Usuario")
+            contrasena = st.text_input("Contraseña", type="password")
+            st.markdown('<div class="login-divider"></div>', unsafe_allow_html=True)
             submitted = st.form_submit_button("INICIAR SESIÓN", use_container_width=True)
-            
             if submitted:
                 if not usuario or not contrasena:
-                    st.error("❌ Por favor, complete ambos campos.")
+                    st.error("Complete todos los campos.")
                 elif verificar_credenciales(usuario, contrasena):
                     st.session_state.logged_in = True
                     st.session_state.usuario_activo = usuario
                     registrar_log(usuario, "LOGIN", "Acceso exitoso")
-                    st.success("✅ Acceso concedido. Redirigiendo...")
                     st.rerun()
                 else:
                     registrar_log(usuario, "FALLO_LOGIN", "Credenciales incorrectas", "ERROR")
-                    st.error("❌ Usuario o contraseña incorrectos.")
-        
+                    st.error("Credenciales no válidas.")
         st.markdown('</div>', unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
-
-# ============================================================
-# PÁGINA PRINCIPAL
-# ============================================================
 
 def pagina_principal():
     usuario = st.session_state.usuario_activo
 
-    # Sidebar con información actualizada
+    # Sidebar siempre visible
     with st.sidebar:
         st.markdown(f"""
-        <div style="font-size:0.6rem; letter-spacing:0.12em; text-transform:uppercase; color:#8b95a8; margin-bottom:0.5rem">
+        <div style="font-family:var(--font-mono);font-size:0.6rem;letter-spacing:0.12em;
+                    text-transform:uppercase;color:#8b95a8;margin-bottom:0.5rem">
             Sesión activa
         </div>
-        <div style="font-size:0.9rem; color:#f59e0b; font-weight:600">
+        <div style="font-family:var(--font-mono);font-size:0.9rem;color:#f59e0b;font-weight:600">
             {usuario}
         </div>
         """, unsafe_allow_html=True)
         st.markdown("<br>", unsafe_allow_html=True)
+
         if st.button("CERRAR SESIÓN", type="secondary", use_container_width=True):
             registrar_log(usuario, "LOGOUT", "Cierre manual de sesión")
             for key in ["logged_in", "usuario_activo", "archivos_subidos", "resultados_proceso"]:
@@ -536,36 +585,65 @@ def pagina_principal():
                 else:
                     st.session_state[key] = {}
             st.rerun()
+
         st.markdown("<br>", unsafe_allow_html=True)
 
         arch = st.session_state.archivos_subidos
-        n_bak = sum(1 for n,d in arch.items() if validate_file(n,d)[1]=="bak")
-        n_dat = sum(1 for n,d in arch.items() if validate_file(n,d)[1]=="dat")
-        n_comp = sum(1 for n,d in arch.items() if validate_file(n,d)[1] in ["zip","rar"])
+        n_bak = 0
+        n_dat = 0
+        n_zip = 0
+        n_rar = 0
+        for fn, data in arch.items():
+            val, typ = validate_file(fn, data)
+            if val:
+                if typ == "bak": n_bak += 1
+                elif typ == "dat": n_dat += 1
+                elif typ == "zip": n_zip += 1
+                elif typ == "rar": n_rar += 1
         st.markdown(f"""
-        <div style="font-size:0.6rem; letter-spacing:0.1em; text-transform:uppercase; color:#8b95a8; margin-bottom:0.8rem">
+        <div style="font-family:var(--font-mono);font-size:0.6rem;letter-spacing:0.1em;
+                    text-transform:uppercase;color:#8b95a8;margin-bottom:0.8rem">
             Cola de archivos
         </div>
-        <div style="display:flex; flex-direction:column; gap:0.3rem">
-            <div style="display:flex; justify-content:space-between"><span style="color:#3b82f6">BAK</span><span>{n_bak}</span></div>
-            <div style="display:flex; justify-content:space-between"><span style="color:#f59e0b">DAT</span><span>{n_dat}</span></div>
-            <div style="display:flex; justify-content:space-between"><span style="color:#10b981">ZIP/RAR</span><span>{n_comp}</span></div>
-            <div style="border-top:1px solid #2a3040; padding-top:0.4rem; margin-top:0.2rem; display:flex; justify-content:space-between">
-                <span>TOTAL</span><span>{len(arch)}</span>
+        <div style="display:flex;flex-direction:column;gap:0.3rem">
+            <div style="display:flex;justify-content:space-between;font-family:var(--font-mono);font-size:0.75rem">
+                <span style="color:#3b82f6">BAK</span><span>{n_bak}</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;font-family:var(--font-mono);font-size:0.75rem">
+                <span style="color:#f59e0b">DAT</span><span>{n_dat}</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;font-family:var(--font-mono);font-size:0.75rem">
+                <span style="color:#10b981">ZIP/RAR</span><span>{n_zip + n_rar}</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;font-family:var(--font-mono);font-size:0.75rem;
+                        border-top:1px solid #2a3040;padding-top:0.4rem;margin-top:0.2rem">
+                <span style="color:#8b95a8">TOTAL</span><span>{len(arch)}</span>
             </div>
         </div>
         """, unsafe_allow_html=True)
 
     render_topbar(usuario)
 
-    # Logo principal
+    # Botón adicional de cerrar sesión en la página principal
+    col_logout, col_empty = st.columns([1, 5])
+    with col_logout:
+        if st.button("🚪 CERRAR SESIÓN", type="secondary"):
+            registrar_log(usuario, "LOGOUT", "Cierre desde botón principal")
+            for key in ["logged_in", "usuario_activo", "archivos_subidos", "resultados_proceso"]:
+                if key == "logged_in":
+                    st.session_state[key] = False
+                elif key == "usuario_activo":
+                    st.session_state[key] = None
+                else:
+                    st.session_state[key] = {}
+            st.rerun()
+
     if os.path.exists(CONFIG.logo_path):
         col_l, col_m, col_r = st.columns([1, 2, 1])
         with col_m:
             st.image(CONFIG.logo_path, use_column_width=True)
         st.markdown("<br>", unsafe_allow_html=True)
 
-    # Subir archivos
     render_section_header("SUBIR ARCHIVOS", "01")
     uploaded_files = st.file_uploader(
         "Arrastre o seleccione archivos (.bak / .dat / .zip / .rar)",
@@ -612,7 +690,7 @@ def pagina_principal():
             if not valido:
                 st.caption(f"  ↳ ⚠ {tipo}")
         n_sel = sum(seleccionados.values())
-        st.markdown(f'<div style="font-size:0.65rem; color:#8b95a8; margin:0.5rem 0">{n_sel} de {len(arch)} archivo(s) seleccionado(s)</div>', unsafe_allow_html=True)
+        st.markdown(f'<div style="font-family:var(--font-mono);font-size:0.65rem;color:#8b95a8;margin:0.5rem 0">{n_sel} de {len(arch)} archivo(s) seleccionado(s)</div>', unsafe_allow_html=True)
 
         if st.button(f"▶  PROCESAR {n_sel} ARCHIVO(S)", use_container_width=True):
             archivos_a_procesar = [n for n, sel in seleccionados.items() if sel]
@@ -656,11 +734,11 @@ def pagina_principal():
 
     else:
         st.markdown("""
-        <div style="border:1px dashed #2a3040; border-radius:6px; padding:2rem; text-align:center; font-size:0.75rem; color:#8b95a8; margin:1rem 0">
+        <div style="border:1px dashed #2a3040;border-radius:6px;padding:2rem;text-align:center;
+                    font-family:'IBM Plex Mono',monospace;font-size:0.75rem;color:#8b95a8;margin:1rem 0">
             Cola vacía — Suba archivos .bak, .dat, .zip o .rar para comenzar
         </div>""", unsafe_allow_html=True)
 
-    # Resultados del último proceso
     if st.session_state.get("resultados_proceso"):
         render_section_header("RESULTADO DEL ÚLTIMO LOTE", "04")
         for r in st.session_state.resultados_proceso:
@@ -669,7 +747,6 @@ def pagina_principal():
             else:
                 st.error(f"✗ {r['archivo']} — {r['detalle']}")
 
-    # Reporte de actividad
     render_section_header("REPORTE DE ACTIVIDAD", "05")
     df_reporte = leer_reporte(usuario)
     if df_reporte is not None and not df_reporte.empty:
@@ -685,26 +762,26 @@ def pagina_principal():
         ])
         st.dataframe(df_reporte.sort_values("Fecha", ascending=False), use_container_width=True, hide_index=True)
 
-        col1, col2, _ = st.columns([1,1,2])
+        col_dl1, col_dl2, _ = st.columns([1,1,2])
         if REPORTLAB_DISPONIBLE:
             pdf_bytes = exportar_pdf(df_reporte, f"Reporte Actividad - {usuario}")
             if pdf_bytes:
-                with col1:
+                with col_dl1:
                     st.download_button("⬇ PDF", data=pdf_bytes, file_name=f"reporte_{usuario}_{datetime.now().strftime('%Y%m%d')}.pdf", mime="application/pdf", use_container_width=True)
             else:
-                with col1:
-                    st.error("Error generando PDF")
+                with col_dl1:
+                    st.error("Error al generar el PDF.")
         else:
-            with col1:
-                st.warning("PDF no disponible (instala reportlab)")
-
+            with col_dl1:
+                st.warning("PDF no disponible. Instale reportlab: pip install reportlab")
         if usuario == "Admin":
-            with col2:
+            with col_dl2:
                 csv_bytes = df_reporte.to_csv(index=False, encoding="utf-8-sig").encode("utf-8-sig")
                 st.download_button("⬇ CSV", data=csv_bytes, file_name=f"reporte_{datetime.now().strftime('%Y%m%d')}.csv", mime="text/csv", use_container_width=True)
     else:
         st.markdown("""
-        <div style="border:1px dashed #2a3040; border-radius:6px; padding:2rem; text-align:center; font-size:0.75rem; color:#8b95a8">
+        <div style="border:1px dashed #2a3040;border-radius:6px;padding:2rem;text-align:center;
+                    font-family:'IBM Plex Mono',monospace;font-size:0.75rem;color:#8b95a8">
             Sin datos de actividad — Procese archivos BAK o DAT para generar el reporte.
         </div>""", unsafe_allow_html=True)
 
@@ -718,6 +795,7 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 st.markdown(CSS, unsafe_allow_html=True)
+
 init_session()
 
 if not st.session_state.logged_in:
