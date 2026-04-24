@@ -273,6 +273,10 @@ html, body, [class*="css"], .stApp {
     width: 100%;
     padding-top: 1rem;
 }
+/* Eliminar espacio entre logo y título */
+.stImage {
+    margin-bottom: 0 !important;
+}
 .login-box {
     background: var(--bg-card);
     border: 1px solid var(--border);
@@ -365,7 +369,6 @@ def render_section_header(texto: str, icono: str = ""):
     st.markdown(f'<div class="section-header">{icono} {texto_limpio}</div>', unsafe_allow_html=True)
 
 def render_metrics_table(metrics: dict, columns_order: list):
-    """Renderiza una tabla HTML con una fila de métricas."""
     html = '<table class="data-table"><thead><tr>'
     for col in columns_order:
         html += f'<th>{col}</th>'
@@ -376,7 +379,6 @@ def render_metrics_table(metrics: dict, columns_order: list):
     st.markdown(html, unsafe_allow_html=True)
 
 def render_file_table(archivos: dict):
-    """Tabla con nombre, tipo, tamaño de cada archivo."""
     if not archivos:
         return
     html = '<table class="data-table"><thead><tr><th>Nombre</th><th>Tipo</th><th>Tamaño</th></tr></thead><tbody>'
