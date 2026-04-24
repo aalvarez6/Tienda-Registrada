@@ -108,17 +108,23 @@ def process_compressed(ruta: Path, usuario: str, file_type: str) -> dict:
     registrar_log(usuario, "GUARDAR_COMPRIMIDO", f"{file_type.upper()} guardado: {ruta.name}")
     return {"tipo": file_type.upper(), "estado": "OK", "ruta": str(ruta)}
 
-def actualizar_reporte_excel(usuario: str, total: int, cant_bak: int, cant_dat: int):
-    """Solo BAK y DAT generan líneas en el reporte. ZIP/RAR no se contabilizan aquí."""
+def actualizar_reporte_excel(usuario: str, total: int, cant_bak: int, cant_dat: int, cant_zip: int, cant_rar: int):
+    """Agrega fila con BAK, DAT, ZIP y RAR"""
     nueva_fila = pd.DataFrame([{
         "Fecha": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "Usuario": usuario,
         "Total_Subidos": total,
         "Cantidad_BAK": cant_bak,
         "Cantidad_DAT": cant_dat,
+        "Cantidad_ZIP": cant_zip,
+        "Cantidad_RAR": cant_rar,
     }])
     if CONFIG.excel_reporte.exists():
         df_existente = pd.read_excel(CONFIG.excel_reporte, engine="openpyxl")
+        # Asegurar que las columnas nuevas existan (migración)
+        for col in ["Cantidad_ZIP", "Cantidad_RAR"]:
+            if col not in df_existente.columns:
+                df_existente[col] = 0
         df_nuevo = pd.concat([df_existente, nueva_fila], ignore_index=True)
     else:
         df_nuevo = nueva_fila
@@ -128,6 +134,10 @@ def leer_reporte(usuario: str) -> Optional[pd.DataFrame]:
     if not CONFIG.excel_reporte.exists():
         return None
     df = pd.read_excel(CONFIG.excel_reporte, engine="openpyxl")
+    # Asegurar columnas nuevas por si acaso
+    for col in ["Cantidad_ZIP", "Cantidad_RAR"]:
+        if col not in df.columns:
+            df[col] = 0
     if usuario == "Admin":
         return df
     else:
@@ -167,7 +177,7 @@ def exportar_pdf(df: pd.DataFrame, titulo: str) -> Optional[bytes]:
     return buffer.getvalue()
 
 # ============================================================
-# CSS (con los colores y estilos solicitados)
+# CSS (con colores y estilos solicitados)
 # ============================================================
 
 CSS = """
@@ -493,26 +503,33 @@ def pagina_principal():
     )
     if uploaded_files:
         nuevos = 0
+        duplicados = 0
         for file in uploaded_files:
-            if file.name not in st.session_state.archivos_subidos:
+            if file.name in st.session_state.archivos_subidos:
+                duplicados += 1
+            else:
                 st.session_state.archivos_subidos[file.name] = file.getvalue()
                 nuevos += 1
         if nuevos:
             st.success(f"✓ {nuevos} archivo(s) nuevo(s) agregado(s) a la cola.")
+        if duplicados:
+            st.warning(f"⚠️ {duplicados} archivo(s) ya estaban en la cola y no se duplicaron.")
 
     arch = st.session_state.archivos_subidos
     if arch:
         render_section_header("COLA DE PROCESO")
         n_bak = sum(1 for n,d in arch.items() if validate_file(n,d)[1]=="bak")
         n_dat = sum(1 for n,d in arch.items() if validate_file(n,d)[1]=="dat")
-        n_comp = sum(1 for n,d in arch.items() if validate_file(n,d)[1] in ["zip","rar"])
+        n_zip = sum(1 for n,d in arch.items() if validate_file(n,d)[1]=="zip")
+        n_rar = sum(1 for n,d in arch.items() if validate_file(n,d)[1]=="rar")
         n_err = sum(1 for n,d in arch.items() if not validate_file(n,d)[0])
         total_kb = round(sum(len(d) for d in arch.values()) / 1024, 1)
         render_metric_grid([
             {"label": "Total Archivos", "value": len(arch)},
             {"label": "BAK (SQL)",      "value": n_bak},
             {"label": "DAT",            "value": n_dat},
-            {"label": "ZIP / RAR",      "value": n_comp},
+            {"label": "ZIP",            "value": n_zip},
+            {"label": "RAR",            "value": n_rar},
             {"label": "No soportados",  "value": n_err, "color": "red" if n_err else ""},
             {"label": "Tamaño total",   "value": f"{total_kb} KB"},
         ])
@@ -557,15 +574,18 @@ def pagina_principal():
                             elif tipo == "dat":
                                 process_dat(ruta, usuario)
                                 contadores["dat"] += 1
-                            else:  # zip o rar
+                            elif tipo == "zip":
                                 process_compressed(ruta, usuario, tipo)
-                                contadores[tipo] += 1
+                                contadores["zip"] += 1
+                            elif tipo == "rar":
+                                process_compressed(ruta, usuario, tipo)
+                                contadores["rar"] += 1
                             resultados.append({"archivo": nombre, "estado": "OK", "detalle": str(ruta)})
                         progress_bar.progress((i+1)/total)
 
-                total_bak_dat = contadores["bak"] + contadores["dat"]
-                if total_bak_dat > 0:
-                    actualizar_reporte_excel(usuario, total_bak_dat, contadores["bak"], contadores["dat"])
+                total_bak_dat_zip_rar = contadores["bak"] + contadores["dat"] + contadores["zip"] + contadores["rar"]
+                if total_bak_dat_zip_rar > 0:
+                    actualizar_reporte_excel(usuario, total_bak_dat_zip_rar, contadores["bak"], contadores["dat"], contadores["zip"], contadores["rar"])
 
                 for r in resultados:
                     if r["archivo"] in st.session_state.archivos_subidos:
@@ -593,11 +613,15 @@ def pagina_principal():
         total_registros = len(df_reporte)
         total_bak = int(df_reporte["Cantidad_BAK"].sum())
         total_dat = int(df_reporte["Cantidad_DAT"].sum())
+        total_zip = int(df_reporte["Cantidad_ZIP"].sum())
+        total_rar = int(df_reporte["Cantidad_RAR"].sum())
         total_archivos = int(df_reporte["Total_Subidos"].sum())
         render_metric_grid([
             {"label": "Sesiones registradas", "value": total_registros, "color": "green"},
             {"label": "BAK procesados",        "value": total_bak},
             {"label": "DAT procesados",        "value": total_dat},
+            {"label": "ZIP procesados",        "value": total_zip},
+            {"label": "RAR procesados",        "value": total_rar},
             {"label": "Total archivos",        "value": total_archivos},
         ])
         st.dataframe(df_reporte.sort_values("Fecha", ascending=False), use_container_width=True, hide_index=True)
@@ -622,7 +646,7 @@ def pagina_principal():
         st.markdown("""
         <div style="border:1px dashed #2a3040;border-radius:6px;padding:2rem;text-align:center;
                     font-family:'Avenir Light',sans-serif;font-size:0.8rem;color:#8b95a8">
-            Sin datos de actividad — Procese archivos BAK o DAT para generar el reporte.
+            Sin datos de actividad — Procese archivos para generar el reporte.
         </div>""", unsafe_allow_html=True)
 
 # ============================================================
