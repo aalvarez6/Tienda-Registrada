@@ -10,7 +10,7 @@ import io
 # ------------------------------------------------------------
 USUARIOS_VALIDOS = [
     "Admin", "Captura1", "Captura2", "Captura3", "Captura4",
-    "Captura5", "Captura6", "Captura7", "Captura8", "Captura9" , "Captura10"
+    "Captura5", "Captura6", "Captura7", "Captura8", "Captura9", "Captura10"
 ]
 CONTRASENA_COMPARTIDA = "TRC1234"
 
@@ -87,19 +87,62 @@ def actualizar_reporte_excel(usuario, total_procesados, cant_bak, cant_dat):
         df_nuevo = nueva_fila
     df_nuevo.to_excel(EXCEL_REPORTE, index=False, engine='openpyxl')
 
+def mostrar_logo_black(ancho=250):
+    """Muestra el logo con filtro para hacerlo completamente negro"""
+    logo_path = "LogoBlack.jpeg"
+    if os.path.exists(logo_path):
+        st.markdown(
+            f"""
+            <div style="text-align: center;">
+                <img src="data:image/jpeg;base64,{image_to_base64(logo_path)}" width="{ancho}" style="filter: grayscale(100%) brightness(0);">
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+    else:
+        st.warning("LogoBlack.jpeg no encontrado. Añade el archivo a la raíz del proyecto.")
+
+def image_to_base64(path):
+    import base64
+    with open(path, "rb") as f:
+        return base64.b64encode(f.read()).decode()
+
 # ------------------------------------------------------------
-# INTERFAZ STREAMLIT
+# CONFIGURACIÓN GLOBAL DE ESTILOS (Courier y centrado)
 # ------------------------------------------------------------
 st.set_page_config(page_title="Gestor de Backups", layout="wide")
 
-# Mostrar logo en la barra lateral o cabecera (común)
-logo_path = "LogoBlack.jpeg"
-if os.path.exists(logo_path):
-    st.sidebar.image(logo_path, width=400)
-else:
-    st.sidebar.warning("Logo.jpeg no encontrado. Añade el archivo a la raíz del proyecto.")
+st.markdown("""
+<style>
+    /* Tipografía Courier para toda la app */
+    html, body, [class*="css"] {
+        font-family: 'Courier New', Courier, monospace;
+    }
+    /* Centrar contenido de la página de login */
+    .login-container {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 70vh;
+    }
+    .login-card {
+        width: 100%;
+        max-width: 350px;
+        margin: 0 auto;
+    }
+    /* Hacer que los input ocupen el 100% del contenedor */
+    .stTextInput > div {
+        width: 100%;
+    }
+    input {
+        width: 100%;
+    }
+</style>
+""", unsafe_allow_html=True)
 
-st.title("📦 Central de Backups ")
+# ------------------------------------------------------------
+# INTERFAZ STREAMLIT
+# ------------------------------------------------------------
 
 # --- Autenticación ---
 if "logged_in" not in st.session_state:
@@ -107,25 +150,30 @@ if "logged_in" not in st.session_state:
     st.session_state.usuario_activo = None
 
 if not st.session_state.logged_in:
-    # Mostrar logo también en la zona de login
-    if os.path.exists(logo_path):
-        col1, col2, col3 = st.columns([1,2,1])
-        with col2:
-            st.image(logo_path, width=250)
-    st.subheader("🔐 Acceso restringido")
-    with st.form("login_form"):
-        usuario = st.text_input("Usuario")
-        contrasena = st.text_input("Contraseña", type="password")
-        submitted = st.form_submit_button("Iniciar sesión")
-        if submitted:
-            if usuario in USUARIOS_VALIDOS and contrasena == CONTRASENA_COMPARTIDA:
-                st.session_state.logged_in = True
-                st.session_state.usuario_activo = usuario
-                registrar_log(usuario, "LOGIN", "Acceso exitoso")
-                st.success(f"✅ Bienvenido, {usuario}.")
-                st.rerun()
-            else:
-                st.error("❌ Usuario o contraseña incorrectos.")
+    # Página de login centrada
+    st.markdown('<div class="login-container">', unsafe_allow_html=True)
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        st.markdown('<div class="login-card">', unsafe_allow_html=True)
+        # Logo centrado y en negro (filtro aplicado)
+        mostrar_logo_black(ancho=250)
+        st.subheader("🔐 Acceso restringido")
+        with st.form("login_form"):
+            # Campos con el mismo ancho que el logo (controlado por CSS y contenedor)
+            usuario = st.text_input("Usuario", key="login_user")
+            contrasena = st.text_input("Contraseña", type="password", key="login_pass")
+            submitted = st.form_submit_button("Iniciar sesión", use_container_width=True)
+            if submitted:
+                if usuario in USUARIOS_VALIDOS and contrasena == CONTRASENA_COMPARTIDA:
+                    st.session_state.logged_in = True
+                    st.session_state.usuario_activo = usuario
+                    registrar_log(usuario, "LOGIN", "Acceso exitoso")
+                    st.success(f"✅ Bienvenido, {usuario}.")
+                    st.rerun()
+                else:
+                    st.error("❌ Usuario o contraseña incorrectos.")
+        st.markdown('</div>', unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
     st.stop()
 
 # --- Sesión iniciada ---
@@ -137,10 +185,12 @@ if st.sidebar.button("Cerrar sesión"):
     st.session_state.usuario_activo = None
     st.rerun()
 
-# --- Subida de archivos (con logo opcional) ---
-if os.path.exists(logo_path):
-    st.image(logo_path, width=150)
+# --- Mostrar logo (ahora centrado y en negro) en el área principal ---
+mostrar_logo_black(ancho=150)
 
+st.title("📦 Central de Backups")
+
+# --- Subida de archivos ---
 st.header("📤 Subir archivos")
 uploaded_files = st.file_uploader(
     "Seleccione uno o varios archivos (.bak / .dat)",
@@ -212,7 +262,7 @@ if st.session_state.archivos_subidos:
                     total_procesados += 1
                     st.success(f"✅ {nombre} procesado correctamente.")
 
-                # Actualizar reporte Excel (sin columna Tienda)
+                # Actualizar reporte Excel
                 actualizar_reporte_excel(usuario_actual, total_procesados, contadores["bak"], contadores["dat"])
                 st.balloons()
                 st.success(f"🎉 Lote finalizado: {total_procesados} archivos procesados.")
@@ -223,14 +273,13 @@ if st.session_state.archivos_subidos:
                         del st.session_state.archivos_subidos[nom]
                 st.rerun()
 
-# --- Reporte (única sección visible, sin historial) ---
+# --- Reporte de actividad ---
 st.header("📊 Reporte de actividad")
 
 if os.path.exists(EXCEL_REPORTE):
     df_reporte = pd.read_excel(EXCEL_REPORTE, engine='openpyxl')
     st.dataframe(df_reporte)
 
-    # Botones de descarga
     col1, col2 = st.columns(2)
     with col1:
         output_excel = io.BytesIO()
