@@ -35,7 +35,6 @@ class AppConfig:
     csv_path: Path = Path("./data/csv")
     excel_reporte: Path = Path("./data/reporte_actividad.xlsx")
     tipos_validos: tuple = (".bak", ".dat", ".zip", ".rar")
-    # Logos diferenciados
     logo_login: str = "LogoBlue.jpeg"
     logo_main: str = "LogoBlack.jpeg"
 
@@ -166,14 +165,13 @@ def exportar_pdf(df: pd.DataFrame, titulo: str) -> Optional[bytes]:
     return buffer.getvalue()
 
 # ============================================================
-# CSS CON AZUL VIBRANTE, FUENTE AVENIR LIGHT Y TAMAÑO +2PT
+# CSS MODIFICADO: números eliminados, métricas horizontales, colores de botones
 # ============================================================
 
 CSS = """
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Avenir+Light&display=swap');
 
-/* Aumento general de tamaño de letra: base 14pt (aprox +2pt sobre 12pt por defecto) */
 html, body, [class*="css"], .stApp {
     font-family: 'Avenir Light', 'Avenir', 'Helvetica Neue', sans-serif !important;
     background-color: #0d0f12 !important;
@@ -188,16 +186,13 @@ html, body, [class*="css"], .stApp {
     --bg-card-hover: #1f2535;
     --border:        #2a3040;
     --border-light:  #3a4558;
-    --accent:        #0066FF;      /* AZUL VIBRANTE */
+    --accent:        #0066FF;
     --accent-dim:    #0052CC;
     --accent-glow:   rgba(0,102,255,0.25);
     --accent-light:  #2389FF;
     --success:       #10b981;
-    --success-dim:   rgba(16,185,129,0.12);
-    --error:         #ef4444;
-    --error-dim:     rgba(239,68,68,0.12);
+    --error:         #dc2626;
     --info:          #3b82f6;
-    --info-dim:      rgba(59,130,246,0.12);
     --text-primary:  #e8eaf0;
     --text-secondary:#8b95a8;
     --font-sans:     'Avenir Light', 'Avenir', 'Helvetica Neue', sans-serif;
@@ -206,14 +201,13 @@ html, body, [class*="css"], .stApp {
     --shadow:        0 2px 12px rgba(0,0,0,0.4);
 }
 
-/* Ajustes específicos de tamaños (aumentados ~0.1rem respecto a versión anterior) */
 #MainMenu, footer, header, .stDeployButton { display: none !important; }
 .block-container { padding: 1.5rem 2rem 2rem 2rem !important; max-width: 1200px !important; }
 
 .topbar-brand, .topbar-status, .section-header, .metric-label, .metric-value,
 .file-table th, .file-table td, .badge, .login-title, .stButton button,
 .stTextInput label, .stFileUploader label, .stCheckbox label {
-    font-size: 0.85rem !important;  /* ~14px, consistente con 14pt */
+    font-size: 0.85rem !important;
 }
 h1, h2, h3, h4, h5, h6 {
     font-size: 1.2rem !important;
@@ -226,15 +220,102 @@ h1, h2, h3, h4, h5, h6 {
     font-size: 0.75rem !important;
 }
 
-/* Resto del CSS igual pero con los nuevos colores y fuentes */
-.topbar-brand {
-    color: var(--accent);
-    letter-spacing: 0.2em;
-}
+/* Sección headers sin números */
 .section-header {
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    font-weight: 600;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
     border-left: 2px solid var(--accent);
+    padding-left: 0.75rem;
+    margin: 1.5rem 0 1rem;
+}
+
+/* Métricas en línea horizontal (flex row, sin wrap) */
+.metric-grid {
+    display: flex;
+    flex-flow: row nowrap;
+    gap: 1px;
+    background: var(--border);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow-x: auto;
+    margin-bottom: 1.5rem;
+}
+.metric-card {
+    background: var(--bg-card);
+    padding: 1rem 1.2rem;
+    min-width: 160px;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    transition: background 0.2s;
+}
+.metric-card:hover { background: var(--bg-card-hover); }
+.metric-label {
+    font-family: var(--font-mono);
+    font-size: 0.6rem;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
 }
 .metric-value {
+    font-family: var(--font-mono);
+    font-size: 1.8rem;
+    font-weight: 600;
+    color: var(--accent);
+    line-height: 1;
+}
+.metric-value.green { color: var(--success); }
+.metric-value.red   { color: var(--error); }
+
+/* Botones específicos */
+.stButton > button[kind="primary"] {
+    background: var(--accent) !important;
+    color: #fff !important;
+}
+.stButton > button[kind="primary"]:hover {
+    background: var(--accent-light) !important;
+}
+.stButton > button[kind="secondary"] {
+    background: transparent !important;
+    color: var(--text-secondary) !important;
+    border: 1px solid var(--border-light) !important;
+}
+.stButton > button[kind="secondary"]:hover {
+    border-color: var(--accent) !important;
+    color: var(--accent) !important;
+    background: var(--accent-glow) !important;
+}
+/* Botón LIMPIAR COLA y PROCESAR (azul) */
+div[data-testid="stButton"] button:contains("LIMPIAR COLA"),
+div[data-testid="stButton"] button:contains("PROCESAR"),
+div[data-testid="stButton"] button:contains("▶  PROCESAR") {
+    background-color: var(--accent) !important;
+    color: white !important;
+}
+/* Descarga PDF rojo, CSV verde */
+div[data-testid="stDownloadButton"] button:contains("PDF") {
+    background-color: var(--error) !important;
+    color: white !important;
+    border: none !important;
+}
+div[data-testid="stDownloadButton"] button:contains("CSV") {
+    background-color: var(--success) !important;
+    color: white !important;
+    border: none !important;
+}
+/* Uploader area (no es botón, pero se puede estilizar el borde) */
+.stFileUploader > div {
+    border-color: var(--accent) !important;
+    background: var(--bg-card) !important;
+}
+
+/* Mantener resto de estilos */
+.topbar-brand {
     color: var(--accent);
 }
 .badge-dat {
@@ -242,29 +323,22 @@ h1, h2, h3, h4, h5, h6 {
     color: var(--accent-light);
     border: 1px solid var(--accent);
 }
-.stButton > button {
-    background: var(--accent) !important;
-    color: #fff !important;
-}
-.stButton > button:hover {
-    background: var(--accent-light) !important;
-    box-shadow: 0 0 20px var(--accent-glow) !important;
-}
 .stTextInput > div > div > input:focus {
     border-color: var(--accent) !important;
     box-shadow: 0 0 0 2px var(--accent-glow) !important;
 }
-.stFileUploader > div:hover { border-color: var(--accent) !important; }
-/* Mantener el resto del diseño idéntico */
 </style>
 """
 
 # ============================================================
-# COMPONENTES UI (se mantienen igual)
+# COMPONENTES UI (modificados para eliminar números)
 # ============================================================
 
 def render_section_header(texto: str, icono: str = ""):
-    st.markdown(f'<div class="section-header">{icono} {texto}</div>', unsafe_allow_html=True)
+    # Se elimina cualquier número al inicio (ej. "01 SUBIR ARCHIVOS" -> "SUBIR ARCHIVOS")
+    import re
+    texto_limpio = re.sub(r'^\d+\s*', '', texto)
+    st.markdown(f'<div class="section-header">{icono} {texto_limpio}</div>', unsafe_allow_html=True)
 
 def render_metric_grid(metricas: list[dict]):
     cards = ""
@@ -289,12 +363,12 @@ def render_file_table(archivos: dict):
             <td>{nombre}</td>
             <td><span class="badge {clase_badge}">{texto_tipo}</span></td>
             <td>{size_kb} KB</td>
-        </table>"""
+        </tr>"""
     html = f"""
     <table class="file-table">
         <thead><tr><th>Nombre</th><th>Tipo</th><th>Tamaño</th></tr></thead>
         <tbody>{filas}</tbody>
-    </table>"""
+    </td>"""
     st.markdown(html, unsafe_allow_html=True)
 
 def render_topbar(usuario: str):
@@ -324,19 +398,15 @@ def init_session():
             st.session_state[k] = v
 
 # ============================================================
-# PÁGINAS
+# PÁGINAS (con text headers sin números)
 # ============================================================
 
 def pagina_login():
     st.markdown('<div class="login-wrapper">', unsafe_allow_html=True)
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        # Logo específico para login (LogoBlue.jpeg)
         if os.path.exists(CONFIG.logo_login):
             st.image(CONFIG.logo_login, use_column_width=True)
-        else:
-            # No mostrar nada si no existe el archivo
-            pass
         st.markdown('<div class="login-box">', unsafe_allow_html=True)
         st.markdown('<div class="login-title">ACCESO RESTRINGIDO</div>', unsafe_allow_html=True)
         with st.form("login_form", clear_on_submit=False):
@@ -361,7 +431,6 @@ def pagina_login():
 def pagina_principal():
     usuario = st.session_state.usuario_activo
 
-    # Sidebar
     with st.sidebar:
         st.markdown(f"""
         <div style="font-family:'Avenir Light',sans-serif;font-size:0.8rem;letter-spacing:0.12em;
@@ -420,7 +489,6 @@ def pagina_principal():
 
     render_topbar(usuario)
 
-    # Botón de cerrar sesión extra
     col_logout, _ = st.columns([1, 5])
     with col_logout:
         if st.button("🚪 CERRAR SESIÓN", type="secondary"):
@@ -434,14 +502,13 @@ def pagina_principal():
                     st.session_state[key] = {}
             st.rerun()
 
-    # Logo principal (LogoBlack.jpeg) en página de subida
     if os.path.exists(CONFIG.logo_main):
         col_l, col_m, col_r = st.columns([1, 2, 1])
         with col_m:
             st.image(CONFIG.logo_main, use_column_width=True)
         st.markdown("<br>", unsafe_allow_html=True)
 
-    render_section_header("SUBIR ARCHIVOS", "01")
+    render_section_header("SUBIR ARCHIVOS")
     uploaded_files = st.file_uploader(
         "Arrastre o seleccione archivos (.bak / .dat / .zip / .rar)",
         type=["bak", "dat", "zip", "rar"],
@@ -458,7 +525,7 @@ def pagina_principal():
 
     arch = st.session_state.archivos_subidos
     if arch:
-        render_section_header("COLA DE PROCESO", "02")
+        render_section_header("COLA DE PROCESO")
         n_bak = sum(1 for n,d in arch.items() if validate_file(n,d)[1]=="bak")
         n_dat = sum(1 for n,d in arch.items() if validate_file(n,d)[1]=="dat")
         n_comp = sum(1 for n,d in arch.items() if validate_file(n,d)[1] in ["zip","rar"])
@@ -474,8 +541,7 @@ def pagina_principal():
         ])
         render_file_table(arch)
 
-        render_section_header("SELECCIÓN DE ARCHIVOS", "03")
-        # Botón LIMPIAR COLA restaurado
+        render_section_header("SELECCIÓN DE ARCHIVOS")
         col_sel, col_clear = st.columns([4, 1])
         with col_clear:
             if st.button("LIMPIAR COLA", type="secondary"):
@@ -537,29 +603,33 @@ def pagina_principal():
         </div>""", unsafe_allow_html=True)
 
     if st.session_state.get("resultados_proceso"):
-        render_section_header("RESULTADO DEL ÚLTIMO LOTE", "04")
+        render_section_header("RESULTADO DEL ÚLTIMO LOTE")
         for r in st.session_state.resultados_proceso:
             if r["estado"] == "OK":
                 st.success(f"✓ {r['archivo']}")
             else:
                 st.error(f"✗ {r['archivo']} — {r['detalle']}")
 
-    render_section_header("REPORTE DE ACTIVIDAD", "05")
+    render_section_header("REPORTE DE ACTIVIDAD")
     df_reporte = leer_reporte(usuario)
     if df_reporte is not None and not df_reporte.empty:
         total_registros = len(df_reporte)
         total_bak = int(df_reporte["Cantidad_BAK"].sum())
         total_dat = int(df_reporte["Cantidad_DAT"].sum())
+        total_dat = int(df_reporte["Cantidad_ZIP"].sum())
+        total_dat = int(df_reporte["Cantidad_RAR"].sum())
         total_archivos = int(df_reporte["Total_Subidos"].sum())
         render_metric_grid([
             {"label": "Sesiones registradas", "value": total_registros, "color": "green"},
             {"label": "BAK procesados",        "value": total_bak},
             {"label": "DAT procesados",        "value": total_dat},
+            {"label": "ZIP procesados",        "value": total_zip},
+            {"label": "RAR procesados",        "value": total_rar},
             {"label": "Total archivos",        "value": total_archivos},
         ])
         st.dataframe(df_reporte.sort_values("Fecha", ascending=False), use_container_width=True, hide_index=True)
 
-        col_dl1, col_dl2, _ = st.columns([1,1,2])
+        col_dl1, col_dl2, _ = st.columns([1, 1, 2])
         if REPORTLAB_DISPONIBLE:
             pdf_bytes = exportar_pdf(df_reporte, f"Reporte Actividad - {usuario}")
             if pdf_bytes:
@@ -570,7 +640,7 @@ def pagina_principal():
                     st.error("Error al generar el PDF.")
         else:
             with col_dl1:
-                st.warning("PDF no disponible. Instale reportlab: pip install reportlab")
+                st.warning("PDF no disponible. Instale reportlab.")
         if usuario == "Admin":
             with col_dl2:
                 csv_bytes = df_reporte.to_csv(index=False, encoding="utf-8-sig").encode("utf-8-sig")
