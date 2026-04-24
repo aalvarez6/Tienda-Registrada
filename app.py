@@ -61,7 +61,7 @@ init_directories()
 LOG_FILE = CONFIG.log_path / "logs.txt"
 
 # ============================================================
-# CAPA DE LÓGICA DE NEGOCIO (sin cambios)
+# CAPA DE LÓGICA DE NEGOCIO
 # ============================================================
 
 def registrar_log(usuario: str, accion: str, detalle: str, estado: str = "OK"):
@@ -165,14 +165,13 @@ def exportar_pdf(df: pd.DataFrame, titulo: str) -> Optional[bytes]:
     return buffer.getvalue()
 
 # ============================================================
-# CSS ACTUALIZADO
+# CSS CON MODIFICACIONES SOLICITADAS
 # ============================================================
 
 CSS = """
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Avenir+Light&display=swap');
 
-/* Fuente principal y tamaño base */
 html, body, [class*="css"], .stApp {
     font-family: 'Avenir Light', 'Avenir', 'Helvetica Neue', sans-serif !important;
     background-color: #0d0f12 !important;
@@ -193,8 +192,8 @@ html, body, [class*="css"], .stApp {
     --accent-light:  #2389FF;
     --success:       #10b981;
     --success-dim:   rgba(16,185,129,0.12);
-    --error:         #dc2626;
-    --error-dim:     rgba(220,38,38,0.12);
+    --error:         #ef4444;
+    --error-dim:     rgba(239,68,68,0.12);
     --info:          #3b82f6;
     --info-dim:      rgba(59,130,246,0.12);
     --text-primary:  #e8eaf0;
@@ -205,85 +204,62 @@ html, body, [class*="css"], .stApp {
     --shadow:        0 2px 12px rgba(0,0,0,0.4);
 }
 
-/* Ocultar elementos de Streamlit */
 #MainMenu, footer, header, .stDeployButton { display: none !important; }
 .block-container { padding: 1.5rem 2rem 2rem 2rem !important; max-width: 1200px !important; }
 
-/* Topbar */
-.topbar {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    border-bottom: 1px solid var(--border);
-    padding-bottom: 1rem;
-    margin-bottom: 1.5rem;
+.topbar-brand, .topbar-status, .section-header, .metric-label, .metric-value,
+.file-table th, .file-table td, .badge, .login-title, .stButton button,
+.stTextInput label, .stFileUploader label, .stCheckbox label {
+    font-size: 0.85rem !important;
 }
-.topbar-brand {
-    font-family: var(--font-mono);
-    font-size: 0.7rem;
-    font-weight: 600;
-    letter-spacing: 0.2em;
-    text-transform: uppercase;
-    color: var(--accent);
+h1, h2, h3, h4, h5, h6 {
+    font-size: 1.2rem !important;
 }
-.topbar-status {
-    font-family: var(--font-mono);
-    font-size: 0.65rem;
-    color: var(--text-secondary);
+.stButton > button, .stDownloadButton > button {
+    font-size: 0.8rem !important;
+    padding: 0.5rem 1.2rem !important;
 }
-.status-dot {
-    width: 6px; height: 6px;
-    border-radius: 50%;
-    background: var(--success);
-    box-shadow: 0 0 6px var(--success);
-    animation: pulse 2s infinite;
+.stDataFrame th, .stDataFrame td {
+    font-size: 0.75rem !important;
 }
-@keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.4; } }
 
-/* Encabezados de sección (sin números) */
+/* Títulos de sección SIN números */
 .section-header {
-    font-family: var(--font-mono);
-    font-size: 0.7rem;
+    border-left: 2px solid var(--accent);
+    padding-left: 0.75rem;
+    margin: 1.5rem 0 1rem;
     font-weight: 600;
     letter-spacing: 0.18em;
     text-transform: uppercase;
     color: var(--text-secondary);
-    border-left: 2px solid var(--accent);
-    padding-left: 0.75rem;
-    margin: 1.5rem 0 1rem;
 }
 
-/* Métricas en línea horizontal (sin wrap) */
+/* Tarjetas de métricas en horizontal (una fila) */
 .metric-grid {
     display: flex;
     flex-direction: row;
-    flex-wrap: nowrap;
-    overflow-x: auto;
+    flex-wrap: wrap;
     gap: 1px;
     background: var(--border);
     border: 1px solid var(--border);
     border-radius: var(--radius);
+    overflow: hidden;
     margin-bottom: 1.5rem;
 }
 .metric-card {
-    flex: 1 0 160px;
+    flex: 1;
     background: var(--bg-card);
     padding: 1rem 1.2rem;
-    display: flex;
-    flex-direction: column;
-    gap: 0.3rem;
     transition: background 0.2s;
 }
 .metric-card:hover { background: var(--bg-card-hover); }
 .metric-label {
-    font-family: var(--font-mono);
     font-size: 0.6rem;
     letter-spacing: 0.15em;
     text-transform: uppercase;
     color: var(--text-secondary);
 }
 .metric-value {
-    font-family: var(--font-mono);
     font-size: 1.8rem;
     font-weight: 600;
     color: var(--accent);
@@ -292,11 +268,10 @@ html, body, [class*="css"], .stApp {
 .metric-value.green { color: var(--success); }
 .metric-value.red   { color: var(--error); }
 
-/* Tabla de archivos */
+/* Tabla de archivos y dataframe */
 .file-table {
     width: 100%;
     border-collapse: collapse;
-    font-family: var(--font-mono);
     font-size: 0.78rem;
     margin-bottom: 1.5rem;
 }
@@ -308,15 +283,15 @@ html, body, [class*="css"], .stApp {
     text-transform: uppercase;
     color: var(--text-secondary);
     padding: 0.5rem 0.8rem;
+    font-weight: 500;
 }
 .file-table td {
     padding: 0.6rem 0.8rem;
     border-bottom: 1px solid var(--border);
     color: var(--text-primary);
+    vertical-align: middle;
 }
 .file-table tr:hover td { background: var(--bg-card); }
-
-/* Badges */
 .badge {
     display: inline-block;
     font-size: 0.55rem;
@@ -331,7 +306,6 @@ html, body, [class*="css"], .stApp {
 .badge-zip, .badge-rar { background: var(--success-dim); color: var(--success); border: 1px solid var(--success); }
 .badge-error { background: var(--error-dim); color: var(--error); border: 1px solid var(--error); }
 
-/* Login */
 .login-wrapper {
     display: flex;
     flex-direction: column;
@@ -349,7 +323,6 @@ html, body, [class*="css"], .stApp {
     margin-top: 1rem;
 }
 .login-title {
-    font-family: var(--font-mono);
     font-size: 0.7rem;
     font-weight: 600;
     letter-spacing: 0.2em;
@@ -364,7 +337,7 @@ html, body, [class*="css"], .stApp {
     margin: 1.2rem 0;
 }
 
-/* Inputs */
+/* Campos de entrada */
 .stTextInput > div > div > input,
 .stTextInput > div > div > input[type="password"] {
     background: var(--bg-primary) !important;
@@ -380,56 +353,63 @@ html, body, [class*="css"], .stApp {
     box-shadow: 0 0 0 2px var(--accent-glow) !important;
 }
 .stTextInput label {
-    font-family: var(--font-mono) !important;
     font-size: 0.6rem !important;
     letter-spacing: 0.12em !important;
     text-transform: uppercase !important;
     color: var(--text-secondary) !important;
 }
 
-/* Botones generales */
+/* Botones principales: PROCESAR y LIMPIAR COLA (ambos azules) */
 .stButton > button {
     background: var(--accent) !important;
     color: #fff !important;
     border: none !important;
     border-radius: var(--radius) !important;
-    font-family: var(--font-mono) !important;
-    font-size: 0.7rem !important;
     font-weight: 600 !important;
     letter-spacing: 0.12em !important;
     text-transform: uppercase !important;
-    padding: 0.5rem 1.2rem !important;
 }
 .stButton > button:hover {
     background: var(--accent-light) !important;
     box-shadow: 0 0 20px var(--accent-glow) !important;
     transform: translateY(-1px) !important;
 }
+/* Estilo para botón secundario (si se usara diferente, pero lo unificamos) */
 .stButton > button[kind="secondary"] {
-    background: transparent !important;
-    color: var(--text-secondary) !important;
-    border: 1px solid var(--border-light) !important;
+    background: var(--accent) !important;
+    color: #fff !important;
+    border: none !important;
 }
 .stButton > button[kind="secondary"]:hover {
-    border-color: var(--accent) !important;
-    color: var(--accent) !important;
-    background: var(--accent-glow) !important;
+    background: var(--accent-light) !important;
+    border: none !important;
 }
 
-/* Botones de descarga (PDF rojo, CSV verde) */
-/* Primer botón de descarga (PDF) en la columna izquierda */
-div:has(> div > div > .stDownloadButton:first-child) button {
-    background: #dc2626 !important;
+/* Botones de descarga: PDF rojo, CSV verde */
+.stDownloadButton > button {
+    background: transparent !important;
+    border: 2px solid !important;
+    font-weight: 600 !important;
 }
-div:has(> div > div > .stDownloadButton:first-child) button:hover {
-    background: #ef4444 !important;
+/* Botón PDF (rojo) */
+.stDownloadButton:first-child > button {
+    border-color: #dc2626 !important;
+    color: #dc2626 !important;
 }
-/* Segundo botón de descarga (CSV) en la columna derecha */
-div:has(> div > div > .stDownloadButton:last-child) button {
-    background: #10b981 !important;
+.stDownloadButton:first-child > button:hover {
+    background: rgba(220,38,38,0.1) !important;
+    border-color: #ef4444 !important;
+    color: #ef4444 !important;
 }
-div:has(> div > div > .stDownloadButton:last-child) button:hover {
-    background: #34d399 !important;
+/* Botón CSV (verde) */
+.stDownloadButton:last-child > button {
+    border-color: #10b981 !important;
+    color: #10b981 !important;
+}
+.stDownloadButton:last-child > button:hover {
+    background: rgba(16,185,129,0.1) !important;
+    border-color: #34d399 !important;
+    color: #34d399 !important;
 }
 
 /* File uploader */
@@ -440,16 +420,13 @@ div:has(> div > div > .stDownloadButton:last-child) button:hover {
 }
 .stFileUploader > div:hover { border-color: var(--accent) !important; }
 .stFileUploader label {
-    font-family: var(--font-mono) !important;
     font-size: 0.65rem !important;
     letter-spacing: 0.1em !important;
     text-transform: uppercase !important;
     color: var(--text-secondary) !important;
 }
 
-/* Checkboxes */
 .stCheckbox > label {
-    font-family: var(--font-mono) !important;
     font-size: 0.78rem !important;
 }
 .stCheckbox > label > span:first-child {
@@ -457,19 +434,18 @@ div:has(> div > div > .stDownloadButton:last-child) button:hover {
     border-radius: 2px !important;
 }
 
-/* Dataframe */
+/* Dataframe con scroll horizontal */
 .stDataFrame {
     border: 1px solid var(--border) !important;
     border-radius: var(--radius) !important;
+    overflow-x: auto !important;
 }
 .stDataFrame th {
     background: var(--bg-secondary) !important;
-    font-family: var(--font-mono) !important;
     font-size: 0.6rem !important;
     text-transform: uppercase !important;
 }
 .stDataFrame td {
-    font-family: var(--font-mono) !important;
     font-size: 0.75rem !important;
     background: var(--bg-card) !important;
 }
@@ -481,17 +457,16 @@ div:has(> div > div > .stDownloadButton:last-child) button:hover {
 }
 .css-1d391kg * { font-family: var(--font-mono) !important; }
 
-/* Spinner */
 .stSpinner > div { border-top-color: var(--accent) !important; }
 </style>
 """
 
 # ============================================================
-# COMPONENTES UI (con títulos sin números)
+# COMPONENTES UI
 # ============================================================
 
-def render_section_header(texto: str, icono: str = ""):
-    # Eliminamos el ícono numérico; solo mostramos el texto
+def render_section_header(texto: str):
+    """Renderiza título de sección sin números"""
     st.markdown(f'<div class="section-header">{texto}</div>', unsafe_allow_html=True)
 
 def render_metric_grid(metricas: list[dict]):
@@ -520,7 +495,7 @@ def render_file_table(archivos: dict):
         </tr>"""
     html = f"""
     <table class="file-table">
-        <thead><tr><th>Nombre</th><th>Tipo</th><th>Tamaño</th><tr></thead>
+        <thead><tr><th>Nombre</th><th>Tipo</th><th>Tamaño</th></tr></thead>
         <tbody>{filas}</tbody>
     </table>"""
     st.markdown(html, unsafe_allow_html=True)
@@ -531,7 +506,7 @@ def render_topbar(usuario: str):
     <div class="topbar">
         <div class="topbar-brand">▶ CENTRAL DE BACKUPS  /  SISTEMA TRC</div>
         <div class="topbar-status">
-            <span class="status-dot"></span>
+            <div class="status-dot"></div>
             {usuario.upper()} &nbsp;·&nbsp; {ts}
         </div>
     </div>""", unsafe_allow_html=True)
@@ -585,7 +560,6 @@ def pagina_login():
 def pagina_principal():
     usuario = st.session_state.usuario_activo
 
-    # Sidebar
     with st.sidebar:
         st.markdown(f"""
         <div style="font-family:'Avenir Light',sans-serif;font-size:0.8rem;letter-spacing:0.12em;
@@ -644,7 +618,6 @@ def pagina_principal():
 
     render_topbar(usuario)
 
-    # Botón extra de cerrar sesión
     col_logout, _ = st.columns([1, 5])
     with col_logout:
         if st.button("🚪 CERRAR SESIÓN", type="secondary"):
@@ -658,15 +631,13 @@ def pagina_principal():
                     st.session_state[key] = {}
             st.rerun()
 
-    # Logo principal (negro)
     if os.path.exists(CONFIG.logo_main):
         col_l, col_m, col_r = st.columns([1, 2, 1])
         with col_m:
             st.image(CONFIG.logo_main, use_column_width=True)
         st.markdown("<br>", unsafe_allow_html=True)
 
-    # Sección Subir Archivos (sin número)
-    render_section_header("Subir Archivos")
+    render_section_header("SUBIR ARCHIVOS")
     uploaded_files = st.file_uploader(
         "Arrastre o seleccione archivos (.bak / .dat / .zip / .rar)",
         type=["bak", "dat", "zip", "rar"],
@@ -683,7 +654,7 @@ def pagina_principal():
 
     arch = st.session_state.archivos_subidos
     if arch:
-        render_section_header("Cola de Proceso")
+        render_section_header("COLA DE PROCESO")
         n_bak = sum(1 for n,d in arch.items() if validate_file(n,d)[1]=="bak")
         n_dat = sum(1 for n,d in arch.items() if validate_file(n,d)[1]=="dat")
         n_comp = sum(1 for n,d in arch.items() if validate_file(n,d)[1] in ["zip","rar"])
@@ -699,7 +670,7 @@ def pagina_principal():
         ])
         render_file_table(arch)
 
-        render_section_header("Selección de Archivos")
+        render_section_header("SELECCIÓN DE ARCHIVOS")
         col_sel, col_clear = st.columns([4, 1])
         with col_clear:
             if st.button("LIMPIAR COLA", type="secondary"):
@@ -761,15 +732,14 @@ def pagina_principal():
         </div>""", unsafe_allow_html=True)
 
     if st.session_state.get("resultados_proceso"):
-        render_section_header("Resultado del Último Lote")
+        render_section_header("RESULTADO DEL ÚLTIMO LOTE")
         for r in st.session_state.resultados_proceso:
             if r["estado"] == "OK":
                 st.success(f"✓ {r['archivo']}")
             else:
                 st.error(f"✗ {r['archivo']} — {r['detalle']}")
 
-    # Reporte de actividad con métricas horizontales
-    render_section_header("Reporte de Actividad")
+    render_section_header("REPORTE DE ACTIVIDAD")
     df_reporte = leer_reporte(usuario)
     if df_reporte is not None and not df_reporte.empty:
         total_registros = len(df_reporte)
@@ -782,9 +752,10 @@ def pagina_principal():
             {"label": "DAT procesados",        "value": total_dat},
             {"label": "Total archivos",        "value": total_archivos},
         ])
+        # Mostrar dataframe con scroll horizontal
         st.dataframe(df_reporte.sort_values("Fecha", ascending=False), use_container_width=True, hide_index=True)
 
-        col_dl1, col_dl2, _ = st.columns([1, 1, 2])
+        col_dl1, col_dl2, _ = st.columns([1,1,2])
         if REPORTLAB_DISPONIBLE:
             pdf_bytes = exportar_pdf(df_reporte, f"Reporte Actividad - {usuario}")
             if pdf_bytes:
