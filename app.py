@@ -35,8 +35,8 @@ class AppConfig:
     csv_path: Path = Path("./data/csv")
     excel_reporte: Path = Path("./data/reporte_actividad.xlsx")
     tipos_validos: tuple = (".bak", ".dat", ".zip", ".rar")
-    logo_login: str = "LogoBlue.jpeg"
-    logo_main: str = "LogoBlack.jpeg"
+    logo_login: str = "LogoBlue.jpeg"   # Solo se usa en la pantalla de login
+    # LogoBlack ya no se usa en la página principal (se ha eliminado el bug)
 
 CONFIG = AppConfig()
 
@@ -165,7 +165,7 @@ def exportar_pdf(df: pd.DataFrame, titulo: str) -> Optional[bytes]:
     return buffer.getvalue()
 
 # ============================================================
-# CSS CON MODIFICACIONES SOLICITADAS
+# CSS (sin cambios en la parte visual, solo se mantiene la coherencia)
 # ============================================================
 
 CSS = """
@@ -223,7 +223,6 @@ h1, h2, h3, h4, h5, h6 {
     font-size: 0.75rem !important;
 }
 
-/* Títulos de sección SIN números */
 .section-header {
     border-left: 2px solid var(--accent);
     padding-left: 0.75rem;
@@ -234,7 +233,6 @@ h1, h2, h3, h4, h5, h6 {
     color: var(--text-secondary);
 }
 
-/* Tarjetas de métricas en horizontal (una fila) */
 .metric-grid {
     display: flex;
     flex-direction: row;
@@ -268,7 +266,6 @@ h1, h2, h3, h4, h5, h6 {
 .metric-value.green { color: var(--success); }
 .metric-value.red   { color: var(--error); }
 
-/* Tabla de archivos y dataframe */
 .file-table {
     width: 100%;
     border-collapse: collapse;
@@ -337,7 +334,6 @@ h1, h2, h3, h4, h5, h6 {
     margin: 1.2rem 0;
 }
 
-/* Campos de entrada */
 .stTextInput > div > div > input,
 .stTextInput > div > div > input[type="password"] {
     background: var(--bg-primary) !important;
@@ -359,7 +355,6 @@ h1, h2, h3, h4, h5, h6 {
     color: var(--text-secondary) !important;
 }
 
-/* Botones principales: PROCESAR y LIMPIAR COLA (ambos azules) */
 .stButton > button {
     background: var(--accent) !important;
     color: #fff !important;
@@ -374,7 +369,6 @@ h1, h2, h3, h4, h5, h6 {
     box-shadow: 0 0 20px var(--accent-glow) !important;
     transform: translateY(-1px) !important;
 }
-/* Estilo para botón secundario (si se usara diferente, pero lo unificamos) */
 .stButton > button[kind="secondary"] {
     background: var(--accent) !important;
     color: #fff !important;
@@ -382,16 +376,13 @@ h1, h2, h3, h4, h5, h6 {
 }
 .stButton > button[kind="secondary"]:hover {
     background: var(--accent-light) !important;
-    border: none !important;
 }
 
-/* Botones de descarga: PDF rojo, CSV verde */
 .stDownloadButton > button {
     background: transparent !important;
     border: 2px solid !important;
     font-weight: 600 !important;
 }
-/* Botón PDF (rojo) */
 .stDownloadButton:first-child > button {
     border-color: #dc2626 !important;
     color: #dc2626 !important;
@@ -401,7 +392,6 @@ h1, h2, h3, h4, h5, h6 {
     border-color: #ef4444 !important;
     color: #ef4444 !important;
 }
-/* Botón CSV (verde) */
 .stDownloadButton:last-child > button {
     border-color: #10b981 !important;
     color: #10b981 !important;
@@ -412,7 +402,6 @@ h1, h2, h3, h4, h5, h6 {
     color: #34d399 !important;
 }
 
-/* File uploader */
 .stFileUploader > div {
     background: var(--bg-card) !important;
     border: 1px dashed var(--border-light) !important;
@@ -434,7 +423,6 @@ h1, h2, h3, h4, h5, h6 {
     border-radius: 2px !important;
 }
 
-/* Dataframe con scroll horizontal */
 .stDataFrame {
     border: 1px solid var(--border) !important;
     border-radius: var(--radius) !important;
@@ -450,7 +438,6 @@ h1, h2, h3, h4, h5, h6 {
     background: var(--bg-card) !important;
 }
 
-/* Sidebar */
 .css-1d391kg, [data-testid="stSidebar"] {
     background: var(--bg-secondary) !important;
     border-right: 1px solid var(--border) !important;
@@ -466,7 +453,6 @@ h1, h2, h3, h4, h5, h6 {
 # ============================================================
 
 def render_section_header(texto: str):
-    """Renderiza título de sección sin números"""
     st.markdown(f'<div class="section-header">{texto}</div>', unsafe_allow_html=True)
 
 def render_metric_grid(metricas: list[dict]):
@@ -492,7 +478,7 @@ def render_file_table(archivos: dict):
             <td>{nombre}</td>
             <td><span class="badge {clase_badge}">{texto_tipo}</span></td>
             <td>{size_kb} KB</td>
-        </tr>"""
+        </table>"""
     html = f"""
     <table class="file-table">
         <thead><tr><th>Nombre</th><th>Tipo</th><th>Tamaño</th></tr></thead>
@@ -534,6 +520,7 @@ def pagina_login():
     st.markdown('<div class="login-wrapper">', unsafe_allow_html=True)
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
+        # Mostrar LogoBlue solo si existe
         if os.path.exists(CONFIG.logo_login):
             st.image(CONFIG.logo_login, use_column_width=True)
         st.markdown('<div class="login-box">', unsafe_allow_html=True)
@@ -560,6 +547,7 @@ def pagina_login():
 def pagina_principal():
     usuario = st.session_state.usuario_activo
 
+    # Sidebar
     with st.sidebar:
         st.markdown(f"""
         <div style="font-family:'Avenir Light',sans-serif;font-size:0.8rem;letter-spacing:0.12em;
@@ -618,6 +606,7 @@ def pagina_principal():
 
     render_topbar(usuario)
 
+    # Botón extra de cerrar sesión (opcional)
     col_logout, _ = st.columns([1, 5])
     with col_logout:
         if st.button("🚪 CERRAR SESIÓN", type="secondary"):
@@ -631,11 +620,8 @@ def pagina_principal():
                     st.session_state[key] = {}
             st.rerun()
 
-    if os.path.exists(CONFIG.logo_main):
-        col_l, col_m, col_r = st.columns([1, 2, 1])
-        with col_m:
-            st.image(CONFIG.logo_main, use_column_width=True)
-        st.markdown("<br>", unsafe_allow_html=True)
+    # ===== ELIMINADO EL LOGO BLACK DE LA PÁGINA PRINCIPAL =====
+    # Ya no se muestra ninguna imagen aquí.
 
     render_section_header("SUBIR ARCHIVOS")
     uploaded_files = st.file_uploader(
@@ -651,6 +637,7 @@ def pagina_principal():
                 nuevos += 1
         if nuevos:
             st.success(f"✓ {nuevos} archivo(s) nuevo(s) agregado(s) a la cola.")
+            st.rerun()  # Forzar actualización para mostrar los nuevos archivos
 
     arch = st.session_state.archivos_subidos
     if arch:
@@ -719,6 +706,7 @@ def pagina_principal():
                 if total_bak_dat > 0:
                     actualizar_reporte_excel(usuario, total_bak_dat, contadores["bak"], contadores["dat"])
 
+                # Eliminar solo los archivos procesados (seleccionados)
                 for r in resultados:
                     if r["archivo"] in st.session_state.archivos_subidos:
                         del st.session_state.archivos_subidos[r["archivo"]]
@@ -752,7 +740,6 @@ def pagina_principal():
             {"label": "DAT procesados",        "value": total_dat},
             {"label": "Total archivos",        "value": total_archivos},
         ])
-        # Mostrar dataframe con scroll horizontal
         st.dataframe(df_reporte.sort_values("Fecha", ascending=False), use_container_width=True, hide_index=True)
 
         col_dl1, col_dl2, _ = st.columns([1,1,2])
