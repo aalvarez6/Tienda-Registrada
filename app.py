@@ -109,7 +109,6 @@ def process_compressed(ruta: Path, usuario: str, file_type: str) -> dict:
     return {"tipo": file_type.upper(), "estado": "OK", "ruta": str(ruta)}
 
 def actualizar_reporte_excel(usuario: str, total: int, cant_bak: int, cant_dat: int, cant_zip: int, cant_rar: int):
-    """Agrega fila con BAK, DAT, ZIP y RAR"""
     nueva_fila = pd.DataFrame([{
         "Fecha": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "Usuario": usuario,
@@ -121,7 +120,6 @@ def actualizar_reporte_excel(usuario: str, total: int, cant_bak: int, cant_dat: 
     }])
     if CONFIG.excel_reporte.exists():
         df_existente = pd.read_excel(CONFIG.excel_reporte, engine="openpyxl")
-        # Asegurar que las columnas nuevas existan (migración)
         for col in ["Cantidad_ZIP", "Cantidad_RAR"]:
             if col not in df_existente.columns:
                 df_existente[col] = 0
@@ -134,7 +132,6 @@ def leer_reporte(usuario: str) -> Optional[pd.DataFrame]:
     if not CONFIG.excel_reporte.exists():
         return None
     df = pd.read_excel(CONFIG.excel_reporte, engine="openpyxl")
-    # Asegurar columnas nuevas por si acaso
     for col in ["Cantidad_ZIP", "Cantidad_RAR"]:
         if col not in df.columns:
             df[col] = 0
@@ -177,7 +174,7 @@ def exportar_pdf(df: pd.DataFrame, titulo: str) -> Optional[bytes]:
     return buffer.getvalue()
 
 # ============================================================
-# CSS (con colores y estilos solicitados)
+# CSS: todos los botones azules, tabla combinada
 # ============================================================
 
 CSS = """
@@ -216,22 +213,6 @@ html, body, [class*="css"], .stApp {
 #MainMenu, footer, header, .stDeployButton { display: none !important; }
 .block-container { padding: 1.5rem 2rem 2rem 2rem !important; max-width: 1200px !important; }
 
-.topbar-brand, .topbar-status, .section-header, .metric-label, .metric-value,
-.file-table th, .file-table td, .badge, .login-title, .stButton button,
-.stTextInput label, .stFileUploader label, .stCheckbox label {
-    font-size: 0.85rem !important;
-}
-h1, h2, h3, h4, h5, h6 {
-    font-size: 1.2rem !important;
-}
-.stButton > button, .stDownloadButton > button {
-    font-size: 0.8rem !important;
-    padding: 0.5rem 1.2rem !important;
-}
-.stDataFrame th, .stDataFrame td {
-    font-size: 0.75rem !important;
-}
-
 .section-header {
     font-family: var(--font-mono);
     font-size: 0.65rem;
@@ -244,77 +225,149 @@ h1, h2, h3, h4, h5, h6 {
     margin: 1.5rem 0 1rem;
 }
 
-.metric-grid {
-    display: flex;
-    flex-flow: row nowrap;
-    gap: 1px;
-    background: var(--border);
+/* Tabla combinada (métricas + archivos) */
+.combined-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    margin-bottom: 1.5rem;
+    background: var(--bg-card);
     border: 1px solid var(--border);
     border-radius: var(--radius);
-    overflow-x: auto;
-    margin-bottom: 1.5rem;
+    overflow: hidden;
 }
-.metric-card {
-    background: var(--bg-card);
-    padding: 1rem 1.2rem;
-    min-width: 160px;
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    gap: 0.3rem;
-    transition: background 0.2s;
-}
-.metric-card:hover { background: var(--bg-card-hover); }
-.metric-label {
-    font-family: var(--font-mono);
+.combined-table th {
+    background: var(--bg-secondary);
+    text-align: left;
     font-size: 0.6rem;
-    letter-spacing: 0.15em;
+    letter-spacing: 0.12em;
     text-transform: uppercase;
     color: var(--text-secondary);
+    padding: 0.5rem 0.8rem;
+    font-weight: 500;
+    border-bottom: 1px solid var(--border);
 }
-.metric-value {
-    font-family: var(--font-mono);
-    font-size: 1.8rem;
+.combined-table td {
+    padding: 0.6rem 0.8rem;
+    border-bottom: 1px solid var(--border);
+    color: var(--text-primary);
+    vertical-align: middle;
+}
+.combined-table tr:last-child td {
+    border-bottom: none;
+}
+.combined-table .metric-row td {
+    background: var(--bg-card-hover);
+    font-weight: bold;
+    color: var(--accent);
+}
+.badge {
+    display: inline-block;
+    font-size: 0.55rem;
     font-weight: 600;
-    color: var(--accent);
-    line-height: 1;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 0.2rem 0.5rem;
+    border-radius: 2px;
 }
-.metric-value.green { color: var(--success); }
-.metric-value.red   { color: var(--error); }
+.badge-bak { background: var(--info-dim); color: var(--info); border: 1px solid var(--info); }
+.badge-dat { background: var(--accent-glow); color: var(--accent-light); border: 1px solid var(--accent); }
+.badge-zip, .badge-rar { background: var(--success-dim); color: var(--success); border: 1px solid var(--success); }
+.badge-error { background: var(--error-dim); color: var(--error); border: 1px solid var(--error); }
 
-/* Botón PROCESAR y LIMPIAR COLA azules */
-div[data-testid="stButton"] button:contains("PROCESAR"),
-div[data-testid="stButton"] button:contains("LIMPIAR COLA"),
-div[data-testid="stButton"] button:contains("▶  PROCESAR") {
-    background-color: var(--accent) !important;
-    color: white !important;
+.login-wrapper {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+    padding-top: 1rem;
 }
-/* Descarga PDF rojo, CSV verde */
-div[data-testid="stDownloadButton"] button:contains("PDF") {
-    background-color: var(--error) !important;
-    color: white !important;
-    border: none !important;
+.login-box {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 2rem;
+    width: 100%;
+    max-width: 420px;
+    margin-top: 1rem;
 }
-div[data-testid="stDownloadButton"] button:contains("CSV") {
-    background-color: var(--success) !important;
-    color: white !important;
-    border: none !important;
-}
-.stFileUploader > div {
-    border-color: var(--accent) !important;
-    background: var(--bg-card) !important;
-}
-.topbar-brand {
+.login-title {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
     color: var(--accent);
+    margin-bottom: 1.5rem;
+    text-align: center;
 }
-.badge-dat {
-    background: var(--accent-glow);
-    color: var(--accent-light);
-    border: 1px solid var(--accent);
+.login-divider {
+    height: 1px;
+    background: var(--border);
+    margin: 1.2rem 0;
+}
+
+.stTextInput > div > div > input,
+.stTextInput > div > div > input[type="password"] {
+    background: var(--bg-primary) !important;
+    border: 1px solid var(--border-light) !important;
+    border-radius: var(--radius) !important;
+    color: var(--text-primary) !important;
+    font-family: var(--font-mono) !important;
+    font-size: 0.85rem !important;
+    padding: 0.5rem 0.8rem !important;
 }
 .stTextInput > div > div > input:focus {
     border-color: var(--accent) !important;
     box-shadow: 0 0 0 2px var(--accent-glow) !important;
+}
+.stTextInput label {
+    font-family: var(--font-mono) !important;
+    font-size: 0.6rem !important;
+    letter-spacing: 0.12em !important;
+    text-transform: uppercase !important;
+    color: var(--text-secondary) !important;
+}
+
+/* TODOS LOS BOTONES AZULES */
+.stButton > button, .stDownloadButton > button {
+    background: var(--accent) !important;
+    color: white !important;
+    border: none !important;
+    border-radius: var(--radius) !important;
+    font-family: var(--font-mono) !important;
+    font-size: 0.7rem !important;
+    font-weight: 600 !important;
+    letter-spacing: 0.12em !important;
+    text-transform: uppercase !important;
+    padding: 0.5rem 1.2rem !important;
+}
+.stButton > button:hover, .stDownloadButton > button:hover {
+    background: var(--accent-light) !important;
+    box-shadow: 0 0 20px var(--accent-glow) !important;
+    transform: translateY(-1px) !important;
+}
+.stButton > button[kind="secondary"] {
+    background: transparent !important;
+    color: var(--text-secondary) !important;
+    border: 1px solid var(--border-light) !important;
+}
+.stButton > button[kind="secondary"]:hover {
+    border-color: var(--accent) !important;
+    color: var(--accent) !important;
+    background: var(--accent-glow) !important;
+}
+
+.stFileUploader > div {
+    border-color: var(--accent) !important;
+    background: var(--bg-card) !important;
+}
+.topbar-brand, .topbar-status {
+    font-family: var(--font-mono);
+}
+.topbar-brand {
+    color: var(--accent);
 }
 </style>
 """
@@ -327,47 +380,60 @@ def render_section_header(texto: str, icono: str = ""):
     texto_limpio = re.sub(r'^\d+\s*', '', texto)
     st.markdown(f'<div class="section-header">{icono} {texto_limpio}</div>', unsafe_allow_html=True)
 
-def render_metric_grid(metricas: list[dict]):
-    cards = ""
-    for m in metricas:
-        color_class = m.get("color", "")
-        cards += f"""
-        <div class="metric-card">
-            <div class="metric-label">{m['label']}</div>
-            <div class="metric-value {color_class}">{m['value']}</div>
-        </div>"""
-    st.markdown(f'<div class="metric-grid">{cards}</div>', unsafe_allow_html=True)
+def render_combined_table(archivos: dict):
+    """Genera una única tabla con métricas + lista de archivos"""
+    # Calcular métricas
+    n_total = len(archivos)
+    n_bak = sum(1 for n,d in archivos.items() if validate_file(n,d)[1]=="bak")
+    n_dat = sum(1 for n,d in archivos.items() if validate_file(n,d)[1]=="dat")
+    n_zip = sum(1 for n,d in archivos.items() if validate_file(n,d)[1]=="zip")
+    n_rar = sum(1 for n,d in archivos.items() if validate_file(n,d)[1]=="rar")
+    n_err = sum(1 for n,d in archivos.items() if not validate_file(n,d)[0])
+    total_kb = round(sum(len(d) for d in archivos.values()) / 1024, 1)
 
-def render_file_table(archivos: dict):
-    filas = ""
+    # Construir tabla HTML
+    html = '<table class="combined-table">'
+    # Cabecera
+    html += '<thead><tr>'
+    html += '<th>Nombre / Métrica</th><th>Tipo</th><th>Tamaño / Valor</th>'
+    html += '</tr></thead><tbody>'
+    # Fila de métricas (primera fila especial)
+    html += f'<tr class="metric-row"><td><strong>TOTAL ARCHIVOS</strong></td><td></td><td><strong>{n_total}</strong></td></tr>'
+    html += f'<tr class="metric-row"><td><strong>BAK (SQL)</strong></td><td></td><td><strong>{n_bak}</strong></td></tr>'
+    html += f'<tr class="metric-row"><td><strong>DAT</strong></td><td></td><td><strong>{n_dat}</strong></td></tr>'
+    html += f'<tr class="metric-row"><td><strong>ZIP</strong></td><td></td><td><strong>{n_zip}</strong></td></tr>'
+    html += f'<tr class="metric-row"><td><strong>RAR</strong></td><td></td><td><strong>{n_rar}</strong></td></tr>'
+    html += f'<tr class="metric-row"><td><strong>NO SOPORTADOS</strong></td><td></td><td><strong>{n_err}</strong></td></tr>'
+    html += f'<tr class="metric-row"><td><strong>TAMAÑO TOTAL</strong></td><td></td><td><strong>{total_kb} KB</strong></td></tr>'
+    # Separador visual
+    html += '<tr style="background-color: var(--border);"><td colspan="3" style="height:2px; padding:0;"></td></tr>'
+    # Lista de archivos
     for nombre, datos in archivos.items():
         valido, tipo = validate_file(nombre, datos)
         size_kb = round(len(datos) / 1024, 1)
         clase_badge = f"badge-{tipo}" if valido else "badge-error"
         texto_tipo = tipo.upper() if valido else "ERR"
-        filas += f"""
+        html += f"""
         <tr>
             <td>{nombre}</td>
             <td><span class="badge {clase_badge}">{texto_tipo}</span></td>
             <td>{size_kb} KB</td>
         </tr>"""
-    html = f"""
-    <table class="file-table">
-        <thead><tr><th>Nombre</th><th>Tipo</th><th>Tamaño</th></tr></thead>
-        <tbody>{filas}</tbody>
-    </table>"""
+    html += '</tbody></table>'
     st.markdown(html, unsafe_allow_html=True)
 
 def render_topbar(usuario: str):
     ts = datetime.now().strftime("%Y-%m-%d  %H:%M")
     st.markdown(f"""
-    <div class="topbar">
-        <div class="topbar-brand">▶ CENTRAL DE BACKUPS  /  SISTEMA TRC</div>
-        <div class="topbar-status">
-            <div class="status-dot"></div>
+    <div style="display:flex; justify-content:space-between; border-bottom:1px solid #2a3040; padding-bottom:1rem; margin-bottom:1.5rem;">
+        <div style="font-family:monospace; font-size:0.7rem; font-weight:600; letter-spacing:0.2em; text-transform:uppercase; color:#0066FF;">▶ CENTRAL DE BACKUPS  /  SISTEMA TRC</div>
+        <div style="display:flex; align-items:center; gap:0.5rem; font-family:monospace; font-size:0.65rem; color:#8b95a8;">
+            <div style="width:6px; height:6px; border-radius:50%; background:#10b981; box-shadow:0 0 6px #10b981; animation:pulse 2s infinite;"></div>
             {usuario.upper()} &nbsp;·&nbsp; {ts}
         </div>
-    </div>""", unsafe_allow_html=True)
+    </div>
+    <style> @keyframes pulse {{ 0%,100% {{ opacity:1; }} 50% {{ opacity:0.4; }} }} </style>
+    """, unsafe_allow_html=True)
 
 # ============================================================
 # INICIALIZACIÓN DE SESIÓN
@@ -424,7 +490,7 @@ def pagina_principal():
                     text-transform:uppercase;color:#8b95a8;margin-bottom:0.5rem">
             Sesión activa
         </div>
-        <div style="font-family:'Avenir Light',sans-serif;font-size:1rem;color:var(--accent);font-weight:600">
+        <div style="font-family:'Avenir Light',sans-serif;font-size:1rem;color:#0066FF;font-weight:600">
             {usuario}
         </div>
         """, unsafe_allow_html=True)
@@ -444,31 +510,20 @@ def pagina_principal():
         st.markdown("<br>", unsafe_allow_html=True)
 
         arch = st.session_state.archivos_subidos
-        n_bak = n_dat = n_zip = n_rar = 0
-        for fn, data in arch.items():
-            val, typ = validate_file(fn, data)
-            if val:
-                if typ == "bak": n_bak += 1
-                elif typ == "dat": n_dat += 1
-                elif typ == "zip": n_zip += 1
-                elif typ == "rar": n_rar += 1
+        n_bak = sum(1 for n,d in arch.items() if validate_file(n,d)[1]=="bak")
+        n_dat = sum(1 for n,d in arch.items() if validate_file(n,d)[1]=="dat")
+        n_zip = sum(1 for n,d in arch.items() if validate_file(n,d)[1]=="zip")
+        n_rar = sum(1 for n,d in arch.items() if validate_file(n,d)[1]=="rar")
         st.markdown(f"""
         <div style="font-family:'Avenir Light',sans-serif;font-size:0.7rem;letter-spacing:0.1em;
                     text-transform:uppercase;color:#8b95a8;margin-bottom:0.8rem">
             Cola de archivos
         </div>
         <div style="display:flex;flex-direction:column;gap:0.3rem">
-            <div style="display:flex;justify-content:space-between;font-family:'Avenir Light',sans-serif;font-size:0.85rem">
-                <span style="color:#3b82f6">BAK</span><span>{n_bak}</span>
-            </div>
-            <div style="display:flex;justify-content:space-between;font-family:'Avenir Light',sans-serif;font-size:0.85rem">
-                <span style="color:var(--accent)">DAT</span><span>{n_dat}</span>
-            </div>
-            <div style="display:flex;justify-content:space-between;font-family:'Avenir Light',sans-serif;font-size:0.85rem">
-                <span style="color:#10b981">ZIP/RAR</span><span>{n_zip + n_rar}</span>
-            </div>
-            <div style="display:flex;justify-content:space-between;font-family:'Avenir Light',sans-serif;font-size:0.85rem;
-                        border-top:1px solid #2a3040;padding-top:0.4rem;margin-top:0.2rem">
+            <div style="display:flex;justify-content:space-between"><span style="color:#3b82f6">BAK</span><span>{n_bak}</span></div>
+            <div style="display:flex;justify-content:space-between"><span style="color:#0066FF">DAT</span><span>{n_dat}</span></div>
+            <div style="display:flex;justify-content:space-between"><span style="color:#10b981">ZIP/RAR</span><span>{n_zip + n_rar}</span></div>
+            <div style="display:flex;justify-content:space-between;border-top:1px solid #2a3040;padding-top:0.4rem;margin-top:0.2rem">
                 <span style="color:#8b95a8">TOTAL</span><span>{len(arch)}</span>
             </div>
         </div>
@@ -518,22 +573,8 @@ def pagina_principal():
     arch = st.session_state.archivos_subidos
     if arch:
         render_section_header("COLA DE PROCESO")
-        n_bak = sum(1 for n,d in arch.items() if validate_file(n,d)[1]=="bak")
-        n_dat = sum(1 for n,d in arch.items() if validate_file(n,d)[1]=="dat")
-        n_zip = sum(1 for n,d in arch.items() if validate_file(n,d)[1]=="zip")
-        n_rar = sum(1 for n,d in arch.items() if validate_file(n,d)[1]=="rar")
-        n_err = sum(1 for n,d in arch.items() if not validate_file(n,d)[0])
-        total_kb = round(sum(len(d) for d in arch.values()) / 1024, 1)
-        render_metric_grid([
-            {"label": "Total Archivos", "value": len(arch)},
-            {"label": "BAK (SQL)",      "value": n_bak},
-            {"label": "DAT",            "value": n_dat},
-            {"label": "ZIP",            "value": n_zip},
-            {"label": "RAR",            "value": n_rar},
-            {"label": "No soportados",  "value": n_err, "color": "red" if n_err else ""},
-            {"label": "Tamaño total",   "value": f"{total_kb} KB"},
-        ])
-        render_file_table(arch)
+        # Mostrar tabla combinada (métricas + archivos)
+        render_combined_table(arch)
 
         render_section_header("SELECCIÓN DE ARCHIVOS")
         col_sel, col_clear = st.columns([4, 1])
@@ -548,7 +589,7 @@ def pagina_principal():
             if not valido:
                 st.caption(f"  ↳ ⚠ {tipo}")
         n_sel = sum(seleccionados.values())
-        st.markdown(f'<div style="font-family:var(--font-sans);font-size:0.8rem;color:#8b95a8;margin:0.5rem 0">{n_sel} de {len(arch)} archivo(s) seleccionado(s)</div>', unsafe_allow_html=True)
+        st.markdown(f'<div style="font-family:monospace; font-size:0.8rem; color:#8b95a8; margin:0.5rem 0">{n_sel} de {len(arch)} archivo(s) seleccionado(s)</div>', unsafe_allow_html=True)
 
         if st.button(f"▶  PROCESAR {n_sel} ARCHIVO(S)", use_container_width=True):
             archivos_a_procesar = [n for n, sel in seleccionados.items() if sel]
@@ -583,9 +624,9 @@ def pagina_principal():
                             resultados.append({"archivo": nombre, "estado": "OK", "detalle": str(ruta)})
                         progress_bar.progress((i+1)/total)
 
-                total_bak_dat_zip_rar = contadores["bak"] + contadores["dat"] + contadores["zip"] + contadores["rar"]
-                if total_bak_dat_zip_rar > 0:
-                    actualizar_reporte_excel(usuario, total_bak_dat_zip_rar, contadores["bak"], contadores["dat"], contadores["zip"], contadores["rar"])
+                total_procesados = contadores["bak"] + contadores["dat"] + contadores["zip"] + contadores["rar"]
+                if total_procesados > 0:
+                    actualizar_reporte_excel(usuario, total_procesados, contadores["bak"], contadores["dat"], contadores["zip"], contadores["rar"])
 
                 for r in resultados:
                     if r["archivo"] in st.session_state.archivos_subidos:
@@ -616,14 +657,17 @@ def pagina_principal():
         total_zip = int(df_reporte["Cantidad_ZIP"].sum())
         total_rar = int(df_reporte["Cantidad_RAR"].sum())
         total_archivos = int(df_reporte["Total_Subidos"].sum())
-        render_metric_grid([
-            {"label": "Sesiones registradas", "value": total_registros, "color": "green"},
-            {"label": "BAK procesados",        "value": total_bak},
-            {"label": "DAT procesados",        "value": total_dat},
-            {"label": "ZIP procesados",        "value": total_zip},
-            {"label": "RAR procesados",        "value": total_rar},
-            {"label": "Total archivos",        "value": total_archivos},
-        ])
+        # Mostrar métricas en grid horizontal (opcional, pero conservamos el estilo anterior)
+        st.markdown("""
+        <div style="display:flex; flex-flow:row nowrap; gap:1px; background:#2a3040; border:1px solid #2a3040; border-radius:6px; overflow-x:auto; margin-bottom:1.5rem;">
+            <div style="background:#1a1e28; padding:1rem; min-width:160px; flex:1;"><div style="font-family:monospace; font-size:0.6rem; letter-spacing:0.15em; text-transform:uppercase; color:#8b95a8;">Sesiones registradas</div><div style="font-size:1.8rem; font-weight:600; color:#0066FF;">{total_registros}</div></div>
+            <div style="background:#1a1e28; padding:1rem; min-width:160px; flex:1;"><div style="font-family:monospace; font-size:0.6rem; letter-spacing:0.15em; text-transform:uppercase; color:#8b95a8;">BAK procesados</div><div style="font-size:1.8rem; font-weight:600; color:#0066FF;">{total_bak}</div></div>
+            <div style="background:#1a1e28; padding:1rem; min-width:160px; flex:1;"><div style="font-family:monospace; font-size:0.6rem; letter-spacing:0.15em; text-transform:uppercase; color:#8b95a8;">DAT procesados</div><div style="font-size:1.8rem; font-weight:600; color:#0066FF;">{total_dat}</div></div>
+            <div style="background:#1a1e28; padding:1rem; min-width:160px; flex:1;"><div style="font-family:monospace; font-size:0.6rem; letter-spacing:0.15em; text-transform:uppercase; color:#8b95a8;">ZIP procesados</div><div style="font-size:1.8rem; font-weight:600; color:#0066FF;">{total_zip}</div></div>
+            <div style="background:#1a1e28; padding:1rem; min-width:160px; flex:1;"><div style="font-family:monospace; font-size:0.6rem; letter-spacing:0.15em; text-transform:uppercase; color:#8b95a8;">RAR procesados</div><div style="font-size:1.8rem; font-weight:600; color:#0066FF;">{total_rar}</div></div>
+            <div style="background:#1a1e28; padding:1rem; min-width:160px; flex:1;"><div style="font-family:monospace; font-size:0.6rem; letter-spacing:0.15em; text-transform:uppercase; color:#8b95a8;">Total archivos</div><div style="font-size:1.8rem; font-weight:600; color:#0066FF;">{total_archivos}</div></div>
+        </div>
+        """, unsafe_allow_html=True)
         st.dataframe(df_reporte.sort_values("Fecha", ascending=False), use_container_width=True, hide_index=True)
 
         col_dl1, col_dl2, _ = st.columns([1, 1, 2])
