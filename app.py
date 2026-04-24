@@ -174,7 +174,7 @@ def exportar_pdf(df: pd.DataFrame, titulo: str) -> Optional[bytes]:
     return buffer.getvalue()
 
 # ============================================================
-# CSS: todos los botones azules, tabla combinada
+# CSS
 # ============================================================
 
 CSS = """
@@ -199,15 +199,10 @@ html, body, [class*="css"], .stApp {
     --accent-dim:    #0052CC;
     --accent-glow:   rgba(0,102,255,0.25);
     --accent-light:  #2389FF;
-    --success:       #10b981;
-    --error:         #dc2626;
-    --info:          #3b82f6;
     --text-primary:  #e8eaf0;
     --text-secondary:#8b95a8;
-    --font-sans:     'Avenir Light', 'Avenir', 'Helvetica Neue', sans-serif;
     --font-mono:     'Courier New', monospace;
     --radius:        6px;
-    --shadow:        0 2px 12px rgba(0,0,0,0.4);
 }
 
 #MainMenu, footer, header, .stDeployButton { display: none !important; }
@@ -225,8 +220,43 @@ html, body, [class*="css"], .stApp {
     margin: 1.5rem 0 1rem;
 }
 
-/* Tabla combinada (métricas + archivos) */
-.combined-table {
+/* Tarjetas de métricas horizontales */
+.metric-grid {
+    display: flex;
+    flex-flow: row wrap;
+    gap: 1px;
+    background: var(--border);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow-x: auto;
+    margin-bottom: 1.5rem;
+}
+.metric-card {
+    background: var(--bg-card);
+    padding: 1rem 1.2rem;
+    min-width: 140px;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+}
+.metric-label {
+    font-family: var(--font-mono);
+    font-size: 0.6rem;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+}
+.metric-value {
+    font-family: var(--font-mono);
+    font-size: 1.6rem;
+    font-weight: 600;
+    color: var(--accent);
+    line-height: 1;
+}
+
+/* Tabla de archivos */
+.file-table {
     width: 100%;
     border-collapse: collapse;
     font-family: var(--font-mono);
@@ -237,7 +267,7 @@ html, body, [class*="css"], .stApp {
     border-radius: var(--radius);
     overflow: hidden;
 }
-.combined-table th {
+.file-table th {
     background: var(--bg-secondary);
     text-align: left;
     font-size: 0.6rem;
@@ -248,19 +278,13 @@ html, body, [class*="css"], .stApp {
     font-weight: 500;
     border-bottom: 1px solid var(--border);
 }
-.combined-table td {
+.file-table td {
     padding: 0.6rem 0.8rem;
     border-bottom: 1px solid var(--border);
     color: var(--text-primary);
-    vertical-align: middle;
 }
-.combined-table tr:last-child td {
+.file-table tr:last-child td {
     border-bottom: none;
-}
-.combined-table .metric-row td {
-    background: var(--bg-card-hover);
-    font-weight: bold;
-    color: var(--accent);
 }
 .badge {
     display: inline-block;
@@ -271,10 +295,10 @@ html, body, [class*="css"], .stApp {
     padding: 0.2rem 0.5rem;
     border-radius: 2px;
 }
-.badge-bak { background: var(--info-dim); color: var(--info); border: 1px solid var(--info); }
-.badge-dat { background: var(--accent-glow); color: var(--accent-light); border: 1px solid var(--accent); }
-.badge-zip, .badge-rar { background: var(--success-dim); color: var(--success); border: 1px solid var(--success); }
-.badge-error { background: var(--error-dim); color: var(--error); border: 1px solid var(--error); }
+.badge-bak { background: rgba(59,130,246,0.12); color: #3b82f6; border: 1px solid #3b82f6; }
+.badge-dat { background: rgba(0,102,255,0.12); color: #2389FF; border: 1px solid #0066FF; }
+.badge-zip, .badge-rar { background: rgba(16,185,129,0.12); color: #10b981; border: 1px solid #10b981; }
+.badge-error { background: rgba(239,68,68,0.12); color: #ef4444; border: 1px solid #ef4444; }
 
 .login-wrapper {
     display: flex;
@@ -290,7 +314,7 @@ html, body, [class*="css"], .stApp {
     padding: 2rem;
     width: 100%;
     max-width: 420px;
-    margin-top: 1rem;
+    margin-top: 0;  /* Eliminado espacio extra */
 }
 .login-title {
     font-family: var(--font-mono);
@@ -363,12 +387,6 @@ html, body, [class*="css"], .stApp {
     border-color: var(--accent) !important;
     background: var(--bg-card) !important;
 }
-.topbar-brand, .topbar-status {
-    font-family: var(--font-mono);
-}
-.topbar-brand {
-    color: var(--accent);
-}
 </style>
 """
 
@@ -380,45 +398,35 @@ def render_section_header(texto: str, icono: str = ""):
     texto_limpio = re.sub(r'^\d+\s*', '', texto)
     st.markdown(f'<div class="section-header">{icono} {texto_limpio}</div>', unsafe_allow_html=True)
 
-def render_combined_table(archivos: dict):
-    """Genera una única tabla con métricas + lista de archivos"""
-    # Calcular métricas
-    n_total = len(archivos)
-    n_bak = sum(1 for n,d in archivos.items() if validate_file(n,d)[1]=="bak")
-    n_dat = sum(1 for n,d in archivos.items() if validate_file(n,d)[1]=="dat")
-    n_zip = sum(1 for n,d in archivos.items() if validate_file(n,d)[1]=="zip")
-    n_rar = sum(1 for n,d in archivos.items() if validate_file(n,d)[1]=="rar")
-    n_err = sum(1 for n,d in archivos.items() if not validate_file(n,d)[0])
-    total_kb = round(sum(len(d) for d in archivos.values()) / 1024, 1)
+def render_metric_grid(metrics: list[dict]):
+    html = '<div class="metric-grid">'
+    for m in metrics:
+        html += f'''
+        <div class="metric-card">
+            <div class="metric-label">{m["label"]}</div>
+            <div class="metric-value">{m["value"]}</div>
+        </div>
+        '''
+    html += '</div>'
+    st.markdown(html, unsafe_allow_html=True)
 
-    # Construir tabla HTML
-    html = '<table class="combined-table">'
-    # Cabecera
-    html += '<thead><tr>'
-    html += '<th>Nombre / Métrica</th><th>Tipo</th><th>Tamaño / Valor</th>'
-    html += '</tr></thead><tbody>'
-    # Fila de métricas (primera fila especial)
-    html += f'<tr class="metric-row"><td><strong>TOTAL ARCHIVOS</strong></td><td></td><td><strong>{n_total}</strong></td></tr>'
-    html += f'<tr class="metric-row"><td><strong>BAK (SQL)</strong></td><td></td><td><strong>{n_bak}</strong></td></tr>'
-    html += f'<tr class="metric-row"><td><strong>DAT</strong></td><td></td><td><strong>{n_dat}</strong></td></tr>'
-    html += f'<tr class="metric-row"><td><strong>ZIP</strong></td><td></td><td><strong>{n_zip}</strong></td></tr>'
-    html += f'<tr class="metric-row"><td><strong>RAR</strong></td><td></td><td><strong>{n_rar}</strong></td></tr>'
-    html += f'<tr class="metric-row"><td><strong>NO SOPORTADOS</strong></td><td></td><td><strong>{n_err}</strong></td></tr>'
-    html += f'<tr class="metric-row"><td><strong>TAMAÑO TOTAL</strong></td><td></td><td><strong>{total_kb} KB</strong></td></tr>'
-    # Separador visual
-    html += '<tr style="background-color: var(--border);"><td colspan="3" style="height:2px; padding:0;"></td></tr>'
-    # Lista de archivos
+def render_file_table(archivos: dict):
+    if not archivos:
+        return
+    html = '<table class="file-table"><thead><tr><th>Nombre</th><th>Tipo</th><th>Tamaño</th></tr></thead><tbody>'
     for nombre, datos in archivos.items():
         valido, tipo = validate_file(nombre, datos)
         size_kb = round(len(datos) / 1024, 1)
-        clase_badge = f"badge-{tipo}" if valido else "badge-error"
-        texto_tipo = tipo.upper() if valido else "ERR"
-        html += f"""
+        size_display = f"{size_kb} KB" if size_kb < 1024 else f"{round(size_kb/1024, 1)} MB"
+        badge_class = f"badge-{tipo}" if valido else "badge-error"
+        tipo_display = tipo.upper() if valido else "ERR"
+        html += f'''
         <tr>
             <td>{nombre}</td>
-            <td><span class="badge {clase_badge}">{texto_tipo}</span></td>
-            <td>{size_kb} KB</td>
-        </tr>"""
+            <td><span class="badge {badge_class}">{tipo_display}</span></td>
+            <td>{size_display}</td>
+        </tr>
+        '''
     html += '</tbody></table>'
     st.markdown(html, unsafe_allow_html=True)
 
@@ -573,8 +581,25 @@ def pagina_principal():
     arch = st.session_state.archivos_subidos
     if arch:
         render_section_header("COLA DE PROCESO")
-        # Mostrar tabla combinada (métricas + archivos)
-        render_combined_table(arch)
+        # Métricas
+        n_bak = sum(1 for n,d in arch.items() if validate_file(n,d)[1]=="bak")
+        n_dat = sum(1 for n,d in arch.items() if validate_file(n,d)[1]=="dat")
+        n_zip = sum(1 for n,d in arch.items() if validate_file(n,d)[1]=="zip")
+        n_rar = sum(1 for n,d in arch.items() if validate_file(n,d)[1]=="rar")
+        n_err = sum(1 for n,d in arch.items() if not validate_file(n,d)[0])
+        total_kb = round(sum(len(d) for d in arch.values()) / 1024, 1)
+        total_display = f"{total_kb} KB" if total_kb < 1024 else f"{round(total_kb/1024, 1)} MB"
+        render_metric_grid([
+            {"label": "Total Archivos", "value": len(arch)},
+            {"label": "BAK (SQL)", "value": n_bak},
+            {"label": "DAT", "value": n_dat},
+            {"label": "ZIP", "value": n_zip},
+            {"label": "RAR", "value": n_rar},
+            {"label": "No soportados", "value": n_err},
+            {"label": "Tamaño total", "value": total_display},
+        ])
+        # Tabla de archivos
+        render_file_table(arch)
 
         render_section_header("SELECCIÓN DE ARCHIVOS")
         col_sel, col_clear = st.columns([4, 1])
@@ -657,17 +682,22 @@ def pagina_principal():
         total_zip = int(df_reporte["Cantidad_ZIP"].sum())
         total_rar = int(df_reporte["Cantidad_RAR"].sum())
         total_archivos = int(df_reporte["Total_Subidos"].sum())
-        # Mostrar métricas en grid horizontal (opcional, pero conservamos el estilo anterior)
-        st.markdown("""
-        <div style="display:flex; flex-flow:row nowrap; gap:1px; background:#2a3040; border:1px solid #2a3040; border-radius:6px; overflow-x:auto; margin-bottom:1.5rem;">
-            <div style="background:#1a1e28; padding:1rem; min-width:160px; flex:1;"><div style="font-family:monospace; font-size:0.6rem; letter-spacing:0.15em; text-transform:uppercase; color:#8b95a8;">Sesiones registradas</div><div style="font-size:1.8rem; font-weight:600; color:#0066FF;">{total_registros}</div></div>
-            <div style="background:#1a1e28; padding:1rem; min-width:160px; flex:1;"><div style="font-family:monospace; font-size:0.6rem; letter-spacing:0.15em; text-transform:uppercase; color:#8b95a8;">BAK procesados</div><div style="font-size:1.8rem; font-weight:600; color:#0066FF;">{total_bak}</div></div>
-            <div style="background:#1a1e28; padding:1rem; min-width:160px; flex:1;"><div style="font-family:monospace; font-size:0.6rem; letter-spacing:0.15em; text-transform:uppercase; color:#8b95a8;">DAT procesados</div><div style="font-size:1.8rem; font-weight:600; color:#0066FF;">{total_dat}</div></div>
-            <div style="background:#1a1e28; padding:1rem; min-width:160px; flex:1;"><div style="font-family:monospace; font-size:0.6rem; letter-spacing:0.15em; text-transform:uppercase; color:#8b95a8;">ZIP procesados</div><div style="font-size:1.8rem; font-weight:600; color:#0066FF;">{total_zip}</div></div>
-            <div style="background:#1a1e28; padding:1rem; min-width:160px; flex:1;"><div style="font-family:monospace; font-size:0.6rem; letter-spacing:0.15em; text-transform:uppercase; color:#8b95a8;">RAR procesados</div><div style="font-size:1.8rem; font-weight:600; color:#0066FF;">{total_rar}</div></div>
-            <div style="background:#1a1e28; padding:1rem; min-width:160px; flex:1;"><div style="font-family:monospace; font-size:0.6rem; letter-spacing:0.15em; text-transform:uppercase; color:#8b95a8;">Total archivos</div><div style="font-size:1.8rem; font-weight:600; color:#0066FF;">{total_archivos}</div></div>
-        </div>
-        """, unsafe_allow_html=True)
+        
+        # Métricas en tarjetas horizontales
+        col1, col2, col3, col4, col5, col6 = st.columns(6)
+        with col1:
+            st.metric("Sesiones registradas", total_registros)
+        with col2:
+            st.metric("BAK procesados", total_bak)
+        with col3:
+            st.metric("DAT procesados", total_dat)
+        with col4:
+            st.metric("ZIP procesados", total_zip)
+        with col5:
+            st.metric("RAR procesados", total_rar)
+        with col6:
+            st.metric("Total archivos", total_archivos)
+        
         st.dataframe(df_reporte.sort_values("Fecha", ascending=False), use_container_width=True, hide_index=True)
 
         col_dl1, col_dl2, _ = st.columns([1, 1, 2])
