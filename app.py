@@ -35,7 +35,7 @@ class AppConfig:
     csv_path: Path = Path("./data/csv")
     excel_reporte: Path = Path("./data/reporte_actividad.xlsx")
     tipos_validos: tuple = (".bak", ".dat", ".zip", ".rar")
-    logo_path: str = "LogoBlack.jpeg"   # <-- Asegúrate de que este archivo exista, o comenta las líneas que lo usan
+    logo_path: str = "LogoBlack.jpeg"
 
 CONFIG = AppConfig()
 
@@ -60,7 +60,7 @@ init_directories()
 LOG_FILE = CONFIG.log_path / "logs.txt"
 
 # ============================================================
-# CAPA DE LÓGICA DE NEGOCIO (sin cambios)
+# CAPA DE LÓGICA DE NEGOCIO
 # ============================================================
 
 def registrar_log(usuario: str, accion: str, detalle: str, estado: str = "OK"):
@@ -164,7 +164,7 @@ def exportar_pdf(df: pd.DataFrame, titulo: str) -> Optional[bytes]:
     return buffer.getvalue()
 
 # ============================================================
-# CSS CON NUEVA PALETA AZUL
+# CSS CON AZUL VIBRANTE
 # ============================================================
 
 CSS = """
@@ -178,10 +178,10 @@ CSS = """
     --bg-card-hover: #1f2535;
     --border:        #2a3040;
     --border-light:  #3a4558;
-    --accent:        #2c7da0;      /* AZUL PRINCIPAL */
-    --accent-dim:    #1f5068;
-    --accent-glow:   rgba(44,125,160,0.15);
-    --accent-light:  #5fa8c4;
+    --accent:        #0077b6;      /* AZUL VIBRANTE */
+    --accent-dim:    #023e8a;      /* AZUL OSCURO */
+    --accent-glow:   rgba(0,119,182,0.25);
+    --accent-light:  #00b4d8;      /* AZUL BRILLANTE */
     --success:       #10b981;
     --success-dim:   rgba(16,185,129,0.12);
     --error:         #ef4444;
@@ -320,7 +320,7 @@ html, body, [class*="css"], .stApp {
     border-radius: 2px;
 }
 .badge-bak { background: var(--info-dim); color: var(--info); border: 1px solid var(--info); }
-.badge-dat { background: var(--accent-glow); color: var(--accent); border: 1px solid var(--accent-dim); }
+.badge-dat { background: var(--accent-glow); color: var(--accent-light); border: 1px solid var(--accent); }
 .badge-zip, .badge-rar { background: var(--success-dim); color: var(--success); border: 1px solid var(--success); }
 .badge-error { background: var(--error-dim); color: var(--error); border: 1px solid var(--error); }
 
@@ -466,7 +466,7 @@ html, body, [class*="css"], .stApp {
 """
 
 # ============================================================
-# COMPONENTES UI (sin cambios, solo se referencian)
+# COMPONENTES UI (con simplificaciones)
 # ============================================================
 
 def render_section_header(texto: str, icono: str = ""):
@@ -537,13 +537,9 @@ def pagina_login():
     st.markdown('<div class="login-wrapper">', unsafe_allow_html=True)
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        # Opcional: mostrar el logo solo si existe, si no, no mostrar nada
+        # Logo solo si existe (sin rectángulo vacío)
         if os.path.exists(CONFIG.logo_path):
             st.image(CONFIG.logo_path, use_column_width=True)
-        else:
-            # Si no quieres ningún espacio vacío, comenta las dos líneas anteriores
-            pass
-        
         st.markdown('<div class="login-box">', unsafe_allow_html=True)
         st.markdown('<div class="login-title">ACCESO RESTRINGIDO</div>', unsafe_allow_html=True)
         with st.form("login_form", clear_on_submit=False):
@@ -568,6 +564,7 @@ def pagina_login():
 def pagina_principal():
     usuario = st.session_state.usuario_activo
 
+    # Sidebar
     with st.sidebar:
         st.markdown(f"""
         <div style="font-family:var(--font-mono);font-size:0.6rem;letter-spacing:0.12em;
@@ -626,6 +623,7 @@ def pagina_principal():
 
     render_topbar(usuario)
 
+    # Botón de cerrar sesión adicional (opcional)
     col_logout, _ = st.columns([1, 5])
     with col_logout:
         if st.button("🚪 CERRAR SESIÓN", type="secondary"):
@@ -639,6 +637,7 @@ def pagina_principal():
                     st.session_state[key] = {}
             st.rerun()
 
+    # Logo principal (solo si existe)
     if os.path.exists(CONFIG.logo_path):
         col_l, col_m, col_r = st.columns([1, 2, 1])
         with col_m:
@@ -679,11 +678,7 @@ def pagina_principal():
         render_file_table(arch)
 
         render_section_header("SELECCIÓN DE ARCHIVOS", "03")
-        col_sel, col_clear = st.columns([4,1])
-        with col_clear:
-            if st.button("LIMPIAR COLA", type="secondary"):
-                st.session_state.archivos_subidos = {}
-                st.rerun()
+        # Eliminado el botón "LIMPIAR COLA"
         seleccionados = {}
         for nombre in arch:
             valido, tipo = validate_file(nombre, arch[nombre])
@@ -732,12 +727,12 @@ def pagina_principal():
                         del st.session_state.archivos_subidos[r["archivo"]]
                 st.session_state.resultados_proceso = resultados
                 st.rerun()
-
     else:
+        # Mensaje simple y limpio para cola vacía
         st.markdown("""
         <div style="border:1px dashed #2a3040;border-radius:6px;padding:2rem;text-align:center;
-                    font-family:'IBM Plex Mono',monospace;font-size:0.75rem;color:#8b95a8;margin:1rem 0">
-            Cola vacía — Suba archivos .bak, .dat, .zip o .rar para comenzar
+                    font-family:'IBM Plex Mono',monospace;font-size:0.85rem;color:#8b95a8;margin:1rem 0">
+            Cola vacía — Suba archivos .bak, .dat, .zip o .rar
         </div>""", unsafe_allow_html=True)
 
     if st.session_state.get("resultados_proceso"):
