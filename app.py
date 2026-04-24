@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from typing import Optional
 import hashlib
 
-# Intentar importar reportlab, pero sin mostrar error en UI
+# Intentar importar reportlab, si falla se deshabilita PDF
 try:
     from reportlab.lib.pagesizes import letter
     from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
@@ -18,7 +18,7 @@ try:
     REPORTLAB_DISPONIBLE = True
 except ImportError:
     REPORTLAB_DISPONIBLE = False
-    # No mostramos warning en la UI, solo se registra internamente si es necesario
+    st.warning("⚠️ ReportLab no instalado. La descarga de PDF estará deshabilitada. Instala con: pip install reportlab")
 
 # ============================================================
 # CONFIGURACIÓN CENTRALIZADA
@@ -36,7 +36,7 @@ class AppConfig:
     csv_path: Path = Path("./data/csv")
     excel_reporte: Path = Path("./data/reporte_actividad.xlsx")
     tipos_validos: tuple = (".bak", ".dat", ".zip", ".rar")
-    logo_path: str = "LogoBlack.jpeg"  # ya no se usa, pero se conserva por compatibilidad
+    logo_path: str = "LogoBlack.jpeg"
 
 CONFIG = AppConfig()
 
@@ -165,7 +165,7 @@ def exportar_pdf(df: pd.DataFrame, titulo: str) -> Optional[bytes]:
     return buffer.getvalue()
 
 # ============================================================
-# CSS — DISEÑO INDUSTRIAL PROFESIONAL
+# CSS — DISEÑO INDUSTRIAL PROFESIONAL (sin cambios estéticos)
 # ============================================================
 
 CSS = """
@@ -329,7 +329,7 @@ html, body, [class*="css"], .stApp {
     flex-direction: column;
     align-items: center;
     width: 100%;
-    padding-top: 2rem;
+    padding-top: 1rem;
 }
 .login-box {
     background: var(--bg-card);
@@ -354,13 +354,6 @@ html, body, [class*="css"], .stApp {
     height: 1px;
     background: var(--border);
     margin: 1.2rem 0;
-}
-.lock-emoji {
-    font-size: 4rem;
-    text-align: center;
-    margin-bottom: 0.5rem;
-    color: var(--accent);
-    text-shadow: 0 0 8px var(--accent-glow);
 }
 
 .stTextInput > div > div > input,
@@ -473,7 +466,7 @@ html, body, [class*="css"], .stApp {
 """
 
 # ============================================================
-# COMPONENTES UI REUTILIZABLES
+# COMPONENTES UI REUTILIZABLES (en español)
 # ============================================================
 
 def render_section_header(texto: str, icono: str = ""):
@@ -544,8 +537,8 @@ def pagina_login():
     st.markdown('<div class="login-wrapper">', unsafe_allow_html=True)
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        # Reemplazamos el logo por un emoji de candado estilizado
-        st.markdown('<div class="lock-emoji">🔒</div>', unsafe_allow_html=True)
+        if os.path.exists(CONFIG.logo_path):
+            st.image(CONFIG.logo_path, use_column_width=True)
         st.markdown('<div class="login-box">', unsafe_allow_html=True)
         st.markdown('<div class="login-title">⬡ &nbsp; ACCESO RESTRINGIDO &nbsp; ⬡</div>', unsafe_allow_html=True)
         with st.form("login_form", clear_on_submit=False):
@@ -570,7 +563,7 @@ def pagina_login():
 def pagina_principal():
     usuario = st.session_state.usuario_activo
 
-    # Sidebar
+    # Sidebar siempre visible
     with st.sidebar:
         st.markdown(f"""
         <div style="font-family:var(--font-mono);font-size:0.6rem;letter-spacing:0.12em;
@@ -632,8 +625,11 @@ def pagina_principal():
 
     render_topbar(usuario)
 
-    # Logo ya no se muestra en página principal (se puede mantener o no, pero el usuario no lo pidió)
-    # Si se desea mantener, se puede poner un candado también. Por ahora lo dejamos sin logo.
+    if os.path.exists(CONFIG.logo_path):
+        col_l, col_m, col_r = st.columns([1, 2, 1])
+        with col_m:
+            st.image(CONFIG.logo_path, use_column_width=True)
+        st.markdown("<br>", unsafe_allow_html=True)
 
     render_section_header("SUBIR ARCHIVOS", "01")
     uploaded_files = st.file_uploader(
@@ -754,6 +750,7 @@ def pagina_principal():
         st.dataframe(df_reporte.sort_values("Fecha", ascending=False), use_container_width=True, hide_index=True)
 
         col_dl1, col_dl2, _ = st.columns([1,1,2])
+        # PDF
         if REPORTLAB_DISPONIBLE:
             pdf_bytes = exportar_pdf(df_reporte, f"Reporte Actividad - {usuario}")
             if pdf_bytes:
@@ -764,8 +761,9 @@ def pagina_principal():
                     st.error("No se pudo generar el PDF.")
         else:
             with col_dl1:
-                st.warning("PDF no disponible (instale reportlab)")
+                st.warning("PDF no disponible: instala reportlab")
 
+        # CSV solo para Admin
         if usuario == "Admin":
             with col_dl2:
                 csv_bytes = df_reporte.to_csv(index=False, encoding="utf-8-sig").encode("utf-8-sig")
