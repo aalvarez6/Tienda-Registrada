@@ -7,6 +7,7 @@ from pathlib import Path
 from dataclasses import dataclass, field
 from typing import Optional
 import hashlib
+import re
 
 # Intentar importar reportlab
 try:
@@ -61,7 +62,7 @@ init_directories()
 LOG_FILE = CONFIG.log_path / "logs.txt"
 
 # ============================================================
-# CAPA DE LÓGICA DE NEGOCIO (sin cambios)
+# CAPA DE LÓGICA DE NEGOCIO
 # ============================================================
 
 def registrar_log(usuario: str, accion: str, detalle: str, estado: str = "OK"):
@@ -108,6 +109,7 @@ def process_compressed(ruta: Path, usuario: str, file_type: str) -> dict:
     return {"tipo": file_type.upper(), "estado": "OK", "ruta": str(ruta)}
 
 def actualizar_reporte_excel(usuario: str, total: int, cant_bak: int, cant_dat: int):
+    """Solo BAK y DAT generan líneas en el reporte. ZIP/RAR no se contabilizan aquí."""
     nueva_fila = pd.DataFrame([{
         "Fecha": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "Usuario": usuario,
@@ -165,7 +167,7 @@ def exportar_pdf(df: pd.DataFrame, titulo: str) -> Optional[bytes]:
     return buffer.getvalue()
 
 # ============================================================
-# CSS MODIFICADO: números eliminados, métricas horizontales, colores de botones
+# CSS (con los colores y estilos solicitados)
 # ============================================================
 
 CSS = """
@@ -220,7 +222,6 @@ h1, h2, h3, h4, h5, h6 {
     font-size: 0.75rem !important;
 }
 
-/* Sección headers sin números */
 .section-header {
     font-family: var(--font-mono);
     font-size: 0.65rem;
@@ -233,7 +234,6 @@ h1, h2, h3, h4, h5, h6 {
     margin: 1.5rem 0 1rem;
 }
 
-/* Métricas en línea horizontal (flex row, sin wrap) */
 .metric-grid {
     display: flex;
     flex-flow: row nowrap;
@@ -272,27 +272,9 @@ h1, h2, h3, h4, h5, h6 {
 .metric-value.green { color: var(--success); }
 .metric-value.red   { color: var(--error); }
 
-/* Botones específicos */
-.stButton > button[kind="primary"] {
-    background: var(--accent) !important;
-    color: #fff !important;
-}
-.stButton > button[kind="primary"]:hover {
-    background: var(--accent-light) !important;
-}
-.stButton > button[kind="secondary"] {
-    background: transparent !important;
-    color: var(--text-secondary) !important;
-    border: 1px solid var(--border-light) !important;
-}
-.stButton > button[kind="secondary"]:hover {
-    border-color: var(--accent) !important;
-    color: var(--accent) !important;
-    background: var(--accent-glow) !important;
-}
-/* Botón LIMPIAR COLA y PROCESAR (azul) */
-div[data-testid="stButton"] button:contains("LIMPIAR COLA"),
+/* Botón PROCESAR y LIMPIAR COLA azules */
 div[data-testid="stButton"] button:contains("PROCESAR"),
+div[data-testid="stButton"] button:contains("LIMPIAR COLA"),
 div[data-testid="stButton"] button:contains("▶  PROCESAR") {
     background-color: var(--accent) !important;
     color: white !important;
@@ -308,13 +290,10 @@ div[data-testid="stDownloadButton"] button:contains("CSV") {
     color: white !important;
     border: none !important;
 }
-/* Uploader area (no es botón, pero se puede estilizar el borde) */
 .stFileUploader > div {
     border-color: var(--accent) !important;
     background: var(--bg-card) !important;
 }
-
-/* Mantener resto de estilos */
 .topbar-brand {
     color: var(--accent);
 }
@@ -331,12 +310,10 @@ div[data-testid="stDownloadButton"] button:contains("CSV") {
 """
 
 # ============================================================
-# COMPONENTES UI (modificados para eliminar números)
+# COMPONENTES UI
 # ============================================================
 
 def render_section_header(texto: str, icono: str = ""):
-    # Se elimina cualquier número al inicio (ej. "01 SUBIR ARCHIVOS" -> "SUBIR ARCHIVOS")
-    import re
     texto_limpio = re.sub(r'^\d+\s*', '', texto)
     st.markdown(f'<div class="section-header">{icono} {texto_limpio}</div>', unsafe_allow_html=True)
 
@@ -368,7 +345,7 @@ def render_file_table(archivos: dict):
     <table class="file-table">
         <thead><tr><th>Nombre</th><th>Tipo</th><th>Tamaño</th></tr></thead>
         <tbody>{filas}</tbody>
-    </td>"""
+    </table>"""
     st.markdown(html, unsafe_allow_html=True)
 
 def render_topbar(usuario: str):
@@ -398,7 +375,7 @@ def init_session():
             st.session_state[k] = v
 
 # ============================================================
-# PÁGINAS (con text headers sin números)
+# PÁGINAS
 # ============================================================
 
 def pagina_login():
@@ -580,7 +557,7 @@ def pagina_principal():
                             elif tipo == "dat":
                                 process_dat(ruta, usuario)
                                 contadores["dat"] += 1
-                            else:
+                            else:  # zip o rar
                                 process_compressed(ruta, usuario, tipo)
                                 contadores[tipo] += 1
                             resultados.append({"archivo": nombre, "estado": "OK", "detalle": str(ruta)})
@@ -616,15 +593,11 @@ def pagina_principal():
         total_registros = len(df_reporte)
         total_bak = int(df_reporte["Cantidad_BAK"].sum())
         total_dat = int(df_reporte["Cantidad_DAT"].sum())
-        total_dat = int(df_reporte["Cantidad_ZIP"].sum())
-        total_dat = int(df_reporte["Cantidad_RAR"].sum())
         total_archivos = int(df_reporte["Total_Subidos"].sum())
         render_metric_grid([
             {"label": "Sesiones registradas", "value": total_registros, "color": "green"},
             {"label": "BAK procesados",        "value": total_bak},
             {"label": "DAT procesados",        "value": total_dat},
-            {"label": "ZIP procesados",        "value": total_zip},
-            {"label": "RAR procesados",        "value": total_rar},
             {"label": "Total archivos",        "value": total_archivos},
         ])
         st.dataframe(df_reporte.sort_values("Fecha", ascending=False), use_container_width=True, hide_index=True)
