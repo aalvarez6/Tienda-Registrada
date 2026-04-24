@@ -35,6 +35,7 @@ class AppConfig:
     log_path: Path = Path("./data/logs")
     csv_path: Path = Path("./data/csv")
     excel_reporte: Path = Path("./data/reporte_actividad.xlsx")
+    file_log_csv: Path = Path("./data/file_log.csv")   # Nuevo: registro detallado por archivo
     tipos_validos: tuple = (".bak", ".dat", ".zip", ".rar")
     logo_login: str = "LogoBlue.jpeg"
     logo_main: str = "LogoBlack.jpeg"
@@ -53,6 +54,7 @@ def init_directories():
         CONFIG.log_path,
         CONFIG.csv_path,
         CONFIG.excel_reporte.parent,
+        CONFIG.file_log_csv.parent,
     ]
     for d in dirs:
         d.mkdir(parents=True, exist_ok=True)
@@ -62,7 +64,36 @@ init_directories()
 LOG_FILE = CONFIG.log_path / "logs.txt"
 
 # ============================================================
-# CAPA DE LÓGICA DE NEGOCIO
+# REGISTRO DETALLADO POR ARCHIVO (NUEVO)
+# ============================================================
+
+def registrar_archivo_procesado(usuario: str, nombre_archivo: str, tipo: str, tamaño_kb: float):
+    """Append a file_log.csv con cada archivo procesado."""
+    nueva_fila = pd.DataFrame([{
+        "Fecha": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "Usuario": usuario,
+        "Nombre archivo": nombre_archivo,
+        "Tipo": tipo.upper(),
+        "Tamaño (KB)": round(tamaño_kb, 1)
+    }])
+    if CONFIG.file_log_csv.exists():
+        df_existente = pd.read_csv(CONFIG.file_log_csv)
+        df_nuevo = pd.concat([df_existente, nueva_fila], ignore_index=True)
+    else:
+        df_nuevo = nueva_fila
+    df_nuevo.to_csv(CONFIG.file_log_csv, index=False, encoding="utf-8-sig")
+
+def leer_log_detallado(usuario: str) -> Optional[pd.DataFrame]:
+    if not CONFIG.file_log_csv.exists():
+        return None
+    df = pd.read_csv(CONFIG.file_log_csv)
+    if usuario == "Admin":
+        return df
+    else:
+        return df[df["Usuario"] == usuario]
+
+# ============================================================
+# CAPA DE LÓGICA DE NEGOCIO (modificada para registrar detalle)
 # ============================================================
 
 def registrar_log(usuario: str, accion: str, detalle: str, estado: str = "OK"):
@@ -94,6 +125,10 @@ def guardar_archivo(nombre: str, datos_bytes: bytes, file_type: str, usuario: st
     ruta = target_dir / nuevo_nombre
     ruta.write_bytes(datos_bytes)
     registrar_log(usuario, "GUARDAR_ARCHIVO", f"{nuevo_nombre} → /{target_dir.name}")
+
+    # Registrar en el log detallado
+    tamaño_kb = len(datos_bytes) / 1024
+    registrar_archivo_procesado(usuario, nombre, file_type, tamaño_kb)
     return ruta
 
 def process_bak(ruta: Path, usuario: str) -> dict:
@@ -174,7 +209,7 @@ def exportar_pdf(df: pd.DataFrame, titulo: str) -> Optional[bytes]:
     return buffer.getvalue()
 
 # ============================================================
-# CSS
+# CSS (modificado para login sin espacios)
 # ============================================================
 
 CSS = """
@@ -220,7 +255,7 @@ html, body, [class*="css"], .stApp {
     margin: 1.5rem 0 1rem;
 }
 
-/* Tablas de métricas y archivos */
+/* Tablas de métricas */
 .data-table {
     width: 100%;
     border-collapse: collapse;
@@ -284,7 +319,7 @@ html, body, [class*="css"], .stApp {
     padding: 2rem;
     width: 100%;
     max-width: 420px;
-    margin-top: 0;
+    margin-top: 0;   /* ← elimina espacio superior */
 }
 .login-title {
     font-family: var(--font-mono);
@@ -361,7 +396,7 @@ html, body, [class*="css"], .stApp {
 """
 
 # ============================================================
-# COMPONENTES UI
+# COMPONENTES UI (se eliminó render_file_table)
 # ============================================================
 
 def render_section_header(texto: str, icono: str = ""):
@@ -372,30 +407,10 @@ def render_metrics_table(metrics: dict, columns_order: list):
     html = '<table class="data-table"><thead><tr>'
     for col in columns_order:
         html += f'<th>{col}</th>'
-    html += '</tr></thead><tbody><tr>'
+    html += '</thead><tbody><tr>'
     for col in columns_order:
         html += f'<td>{metrics[col]}</td>'
     html += '</tr></tbody></table>'
-    st.markdown(html, unsafe_allow_html=True)
-
-def render_file_table(archivos: dict):
-    if not archivos:
-        return
-    html = '<table class="data-table"><thead><tr><th>Nombre</th><th>Tipo</th><th>Tamaño</th></tr></thead><tbody>'
-    for nombre, datos in archivos.items():
-        valido, tipo = validate_file(nombre, datos)
-        size_kb = round(len(datos) / 1024, 1)
-        size_display = f"{size_kb} KB" if size_kb < 1024 else f"{round(size_kb/1024, 1)} MB"
-        badge_class = f"badge-{tipo}" if valido else "badge-error"
-        tipo_display = tipo.upper() if valido else "ERR"
-        html += f'''
-        <tr>
-            <td>{nombre}</td>
-            <td><span class="badge {badge_class}">{tipo_display}</span></td>
-            <td>{size_display}</td>
-        </tr>
-        '''
-    html += '</tbody></table>'
     st.markdown(html, unsafe_allow_html=True)
 
 def render_topbar(usuario: str):
@@ -436,6 +451,7 @@ def pagina_login():
     with col2:
         if os.path.exists(CONFIG.logo_login):
             st.image(CONFIG.logo_login, use_column_width=True)
+        # Ya no hay <br> aquí
         st.markdown('<div class="login-box">', unsafe_allow_html=True)
         st.markdown('<div class="login-title">ACCESO RESTRINGIDO</div>', unsafe_allow_html=True)
         with st.form("login_form", clear_on_submit=False):
@@ -548,9 +564,8 @@ def pagina_principal():
 
     arch = st.session_state.archivos_subidos
     if arch:
-        render_section_header("COLA DE PROCESO")
-
-        # Calcular métricas
+        render_section_header("SELECCIÓN DE ARCHIVOS")
+        # Mostrar métricas resumidas de la cola (sin tabla de archivos redundante)
         n_bak = sum(1 for n,d in arch.items() if validate_file(n,d)[1]=="bak")
         n_dat = sum(1 for n,d in arch.items() if validate_file(n,d)[1]=="dat")
         n_zip = sum(1 for n,d in arch.items() if validate_file(n,d)[1]=="zip")
@@ -571,15 +586,13 @@ def pagina_principal():
         columns = ["Total Archivos", "BAK (SQL)", "DAT", "ZIP", "RAR", "No soportados", "Tamaño total"]
         render_metrics_table(metrics, columns)
 
-        # Tabla de archivos
-        render_file_table(arch)
-
-        render_section_header("SELECCIÓN DE ARCHIVOS")
         col_sel, col_clear = st.columns([4, 1])
         with col_clear:
             if st.button("LIMPIAR COLA", type="secondary"):
                 st.session_state.archivos_subidos = {}
                 st.rerun()
+
+        # Checkboxes para seleccionar archivos (sin tabla extra)
         seleccionados = {}
         for nombre in arch:
             valido, tipo = validate_file(nombre, arch[nombre])
@@ -646,7 +659,25 @@ def pagina_principal():
             else:
                 st.error(f"✗ {r['archivo']} — {r['detalle']}")
 
-    render_section_header("REPORTE DE ACTIVIDAD")
+    # ========== NUEVA TABLA DETALLADA POR ARCHIVO ==========
+    render_section_header("HISTORIAL DETALLADO POR ARCHIVO")
+    df_detalle = leer_log_detallado(usuario)
+    if df_detalle is not None and not df_detalle.empty:
+        st.dataframe(df_detalle.sort_values("Fecha", ascending=False), use_container_width=True, hide_index=True)
+        # Botón para exportar este detalle a CSV
+        csv_detalle = df_detalle.to_csv(index=False, encoding="utf-8-sig").encode("utf-8-sig")
+        st.download_button("⬇ Exportar historial a CSV", data=csv_detalle,
+                           file_name=f"historial_archivos_{usuario}_{datetime.now().strftime('%Y%m%d')}.csv",
+                           mime="text/csv", use_container_width=True)
+    else:
+        st.markdown("""
+        <div style="border:1px dashed #2a3040;border-radius:6px;padding:2rem;text-align:center;
+                    font-family:'Avenir Light',sans-serif;font-size:0.8rem;color:#8b95a8">
+            No hay archivos procesados aún.
+        </div>""", unsafe_allow_html=True)
+
+    # ========== TABLA RESUMEN POR SESIÓN (original) ==========
+    render_section_header("RESUMEN POR SESIÓN DE CARGA")
     df_reporte = leer_reporte(usuario)
     if df_reporte is not None and not df_reporte.empty:
         total_registros = len(df_reporte)
@@ -684,7 +715,7 @@ def pagina_principal():
         if usuario == "Admin":
             with col_dl2:
                 csv_bytes = df_reporte.to_csv(index=False, encoding="utf-8-sig").encode("utf-8-sig")
-                st.download_button("⬇ CSV", data=csv_bytes, file_name=f"reporte_{datetime.now().strftime('%Y%m%d')}.csv", mime="text/csv", use_container_width=True)
+                st.download_button("⬇ CSV (resumen)", data=csv_bytes, file_name=f"reporte_resumen_{datetime.now().strftime('%Y%m%d')}.csv", mime="text/csv", use_container_width=True)
     else:
         st.markdown("""
         <div style="border:1px dashed #2a3040;border-radius:6px;padding:2rem;text-align:center;
