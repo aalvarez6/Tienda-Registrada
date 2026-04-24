@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from typing import Optional
 import hashlib
 
-# Intentar importar reportlab, si falla se deshabilita PDF (sin warning global)
+# Intentar importar reportlab
 try:
     from reportlab.lib.pagesizes import letter
     from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
@@ -35,7 +35,7 @@ class AppConfig:
     csv_path: Path = Path("./data/csv")
     excel_reporte: Path = Path("./data/reporte_actividad.xlsx")
     tipos_validos: tuple = (".bak", ".dat", ".zip", ".rar")
-    logo_path: str = "LogoBlack.jpeg"
+    logo_path: str = "LogoBlack.jpeg"   # <-- Asegúrate de que este archivo exista, o comenta las líneas que lo usan
 
 CONFIG = AppConfig()
 
@@ -60,7 +60,7 @@ init_directories()
 LOG_FILE = CONFIG.log_path / "logs.txt"
 
 # ============================================================
-# CAPA DE LÓGICA DE NEGOCIO
+# CAPA DE LÓGICA DE NEGOCIO (sin cambios)
 # ============================================================
 
 def registrar_log(usuario: str, accion: str, detalle: str, estado: str = "OK"):
@@ -164,7 +164,7 @@ def exportar_pdf(df: pd.DataFrame, titulo: str) -> Optional[bytes]:
     return buffer.getvalue()
 
 # ============================================================
-# CSS (sin caracteres extraños en el login)
+# CSS CON NUEVA PALETA AZUL
 # ============================================================
 
 CSS = """
@@ -178,9 +178,10 @@ CSS = """
     --bg-card-hover: #1f2535;
     --border:        #2a3040;
     --border-light:  #3a4558;
-    --accent:        #f59e0b;
-    --accent-dim:    #92400e;
-    --accent-glow:   rgba(245,158,11,0.15);
+    --accent:        #2c7da0;      /* AZUL PRINCIPAL */
+    --accent-dim:    #1f5068;
+    --accent-glow:   rgba(44,125,160,0.15);
+    --accent-light:  #5fa8c4;
     --success:       #10b981;
     --success-dim:   rgba(16,185,129,0.12);
     --error:         #ef4444;
@@ -379,7 +380,7 @@ html, body, [class*="css"], .stApp {
 
 .stButton > button {
     background: var(--accent) !important;
-    color: #000 !important;
+    color: #fff !important;
     border: none !important;
     border-radius: var(--radius) !important;
     font-family: var(--font-mono) !important;
@@ -390,7 +391,7 @@ html, body, [class*="css"], .stApp {
     padding: 0.5rem 1.2rem !important;
 }
 .stButton > button:hover {
-    background: #fbbf24 !important;
+    background: var(--accent-light) !important;
     box-shadow: 0 0 20px var(--accent-glow) !important;
     transform: translateY(-1px) !important;
 }
@@ -465,7 +466,7 @@ html, body, [class*="css"], .stApp {
 """
 
 # ============================================================
-# COMPONENTES UI REUTILIZABLES (en español)
+# COMPONENTES UI (sin cambios, solo se referencian)
 # ============================================================
 
 def render_section_header(texto: str, icono: str = ""):
@@ -536,8 +537,13 @@ def pagina_login():
     st.markdown('<div class="login-wrapper">', unsafe_allow_html=True)
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
+        # Opcional: mostrar el logo solo si existe, si no, no mostrar nada
         if os.path.exists(CONFIG.logo_path):
             st.image(CONFIG.logo_path, use_column_width=True)
+        else:
+            # Si no quieres ningún espacio vacío, comenta las dos líneas anteriores
+            pass
+        
         st.markdown('<div class="login-box">', unsafe_allow_html=True)
         st.markdown('<div class="login-title">ACCESO RESTRINGIDO</div>', unsafe_allow_html=True)
         with st.form("login_form", clear_on_submit=False):
@@ -562,14 +568,13 @@ def pagina_login():
 def pagina_principal():
     usuario = st.session_state.usuario_activo
 
-    # Sidebar siempre visible
     with st.sidebar:
         st.markdown(f"""
         <div style="font-family:var(--font-mono);font-size:0.6rem;letter-spacing:0.12em;
                     text-transform:uppercase;color:#8b95a8;margin-bottom:0.5rem">
             Sesión activa
         </div>
-        <div style="font-family:var(--font-mono);font-size:0.9rem;color:#f59e0b;font-weight:600">
+        <div style="font-family:var(--font-mono);font-size:0.9rem;color:var(--accent);font-weight:600">
             {usuario}
         </div>
         """, unsafe_allow_html=True)
@@ -589,10 +594,7 @@ def pagina_principal():
         st.markdown("<br>", unsafe_allow_html=True)
 
         arch = st.session_state.archivos_subidos
-        n_bak = 0
-        n_dat = 0
-        n_zip = 0
-        n_rar = 0
+        n_bak = n_dat = n_zip = n_rar = 0
         for fn, data in arch.items():
             val, typ = validate_file(fn, data)
             if val:
@@ -610,7 +612,7 @@ def pagina_principal():
                 <span style="color:#3b82f6">BAK</span><span>{n_bak}</span>
             </div>
             <div style="display:flex;justify-content:space-between;font-family:var(--font-mono);font-size:0.75rem">
-                <span style="color:#f59e0b">DAT</span><span>{n_dat}</span>
+                <span style="color:var(--accent)">DAT</span><span>{n_dat}</span>
             </div>
             <div style="display:flex;justify-content:space-between;font-family:var(--font-mono);font-size:0.75rem">
                 <span style="color:#10b981">ZIP/RAR</span><span>{n_zip + n_rar}</span>
@@ -624,8 +626,7 @@ def pagina_principal():
 
     render_topbar(usuario)
 
-    # Botón adicional de cerrar sesión en la página principal
-    col_logout, col_empty = st.columns([1, 5])
+    col_logout, _ = st.columns([1, 5])
     with col_logout:
         if st.button("🚪 CERRAR SESIÓN", type="secondary"):
             registrar_log(usuario, "LOGOUT", "Cierre desde botón principal")
