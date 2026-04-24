@@ -9,8 +9,8 @@ import io
 # CONFIGURACIÓN
 # ------------------------------------------------------------
 USUARIOS_VALIDOS = [
-    "TRCaptura", "Admin1", "UserLog", "SoporteTI", "Operador1",
-    "Analista2", "Gestor3", "CargaDatos", "Supervisor", "Visor"
+    "Admin", "Captura1", "Captura2", "Captura3", "Captura4",
+    "Captura5", "Captura6", "Captura7", "Captura8", "Captura9" , "Captura10"
 ]
 CONTRASENA_COMPARTIDA = "TRC1234"
 
@@ -93,13 +93,13 @@ def actualizar_reporte_excel(usuario, total_procesados, cant_bak, cant_dat):
 st.set_page_config(page_title="Gestor de Backups", layout="wide")
 
 # Mostrar logo en la barra lateral o cabecera (común)
-logo_path = "Logo.jpeg"
+logo_path = "LogoBlack.jpeg"
 if os.path.exists(logo_path):
-    st.sidebar.image(logo_path, width=200)
+    st.sidebar.image(logo_path, width=400)
 else:
     st.sidebar.warning("Logo.jpeg no encontrado. Añade el archivo a la raíz del proyecto.")
 
-st.title("📦 Sistema de Procesamiento de Backups (bak / dat)")
+st.title("📦 Central de Backups ")
 
 # --- Autenticación ---
 if "logged_in" not in st.session_state:
