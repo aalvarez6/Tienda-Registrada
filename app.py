@@ -1,8 +1,3 @@
-"""
-Gestor de Backups - Central de Archivos
-Versión optimizada: arquitectura limpia, UX/UI profesional
-"""
-
 import streamlit as st
 import pandas as pd
 import os
@@ -12,6 +7,11 @@ from pathlib import Path
 from dataclasses import dataclass, field
 from typing import Optional
 import hashlib
+from reportlab.lib.pagesizes import letter
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+from reportlab.lib import colors
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import inch
 
 # ============================================================
 # CONFIGURACIÓN CENTRALIZADA
@@ -28,7 +28,7 @@ class AppConfig:
     log_path: Path = Path("./data/logs")
     csv_path: Path = Path("./data/csv")
     excel_reporte: Path = Path("./data/reporte_actividad.xlsx")
-    tipos_validos: tuple = (".bak", ".dat")
+    tipos_validos: tuple = (".bak", ".dat", ".zip", ".rar")
     logo_path: str = "LogoBlack.jpeg"
 
 CONFIG = AppConfig()
@@ -41,6 +41,7 @@ def init_directories():
     dirs = [
         CONFIG.backup_path / "bak",
         CONFIG.backup_path / "dat",
+        CONFIG.backup_path / "compressed",   # para zip/rar
         CONFIG.log_path,
         CONFIG.csv_path,
         CONFIG.excel_reporte.parent,
@@ -57,21 +58,16 @@ LOG_FILE = CONFIG.log_path / "logs.txt"
 # ============================================================
 
 def registrar_log(usuario: str, accion: str, detalle: str, estado: str = "OK"):
-    """Registra eventos de auditoría con timestamp ISO."""
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     entrada = f"[{timestamp}] | {usuario:12} | {accion:20} | {estado:6} | {detalle}\n"
     with open(LOG_FILE, "a", encoding="utf-8") as f:
         f.write(entrada)
 
-
 def verificar_credenciales(usuario: str, contrasena: str) -> bool:
-    """Verifica credenciales comparando hash de contraseña."""
     hash_input = hashlib.sha256(contrasena.encode()).hexdigest()
     return usuario in CONFIG.usuarios_validos and hash_input == CONFIG.contrasena_hash
 
-
 def validate_file(file_name: str, file_bytes: bytes) -> tuple[bool, str]:
-    """Valida nombre y contenido de archivo. Retorna (válido, tipo/mensaje)."""
     if not file_bytes:
         return False, "Archivo vacío"
     ext = Path(file_name).suffix.lower()
@@ -79,37 +75,38 @@ def validate_file(file_name: str, file_bytes: bytes) -> tuple[bool, str]:
         return True, ext.lstrip(".")
     return False, f"Formato no soportado: {ext or 'sin extensión'}"
 
-
 def guardar_archivo(nombre: str, datos_bytes: bytes, file_type: str, usuario: str) -> Path:
-    """Persiste el archivo con timestamp y registra en log."""
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     nuevo_nombre = f"{ts}_{nombre}"
-    target_dir = CONFIG.backup_path / file_type
+    # Determinar subcarpeta según tipo
+    if file_type in ["zip", "rar"]:
+        target_dir = CONFIG.backup_path / "compressed"
+    else:
+        target_dir = CONFIG.backup_path / file_type
     target_dir.mkdir(parents=True, exist_ok=True)
     ruta = target_dir / nuevo_nombre
     ruta.write_bytes(datos_bytes)
-    registrar_log(usuario, "FILE_SAVE", f"{nuevo_nombre} → /{file_type}")
+    registrar_log(usuario, "FILE_SAVE", f"{nuevo_nombre} → /{target_dir.name}")
     return ruta
 
-
 def process_bak(ruta: Path, usuario: str) -> dict:
-    """Procesa archivo SQL backup. Retorna resultado."""
     registrar_log(usuario, "SQL_RESTORE", str(ruta))
     return {"tipo": "BAK", "estado": "OK", "ruta": str(ruta)}
 
-
 def process_dat(ruta: Path, usuario: str) -> dict:
-    """Procesa archivo DAT → CSV. Retorna resultado."""
     registrar_log(usuario, "DAT_TRANSFORM", str(ruta))
     return {"tipo": "DAT", "estado": "OK", "ruta": str(ruta)}
 
+def process_compressed(ruta: Path, usuario: str, file_type: str) -> dict:
+    registrar_log(usuario, "COMPRESSED_SAVE", f"{file_type.upper()} guardado: {ruta.name}")
+    return {"tipo": file_type.upper(), "estado": "OK", "ruta": str(ruta)}
 
 def actualizar_reporte_excel(usuario: str, total: int, cant_bak: int, cant_dat: int):
-    """Agrega fila de sesión al reporte Excel de actividad."""
+    """El reporte solo contabiliza BAK y DAT (zip/rar no generan entrada en el Excel)"""
     nueva_fila = pd.DataFrame([{
         "Fecha": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "Usuario": usuario,
-        "Total_Subidos": total,
+        "Total_Subidos": total,   # aquí solo los BAK+DAT, excluidos zip/rar
         "Cantidad_BAK": cant_bak,
         "Cantidad_DAT": cant_dat,
     }])
@@ -120,12 +117,54 @@ def actualizar_reporte_excel(usuario: str, total: int, cant_bak: int, cant_dat: 
         df_nuevo = nueva_fila
     df_nuevo.to_excel(CONFIG.excel_reporte, index=False, engine="openpyxl")
 
+def leer_reporte(usuario: str) -> Optional[pd.DataFrame]:
+    """Filtra el reporte según el rol: admin ve todo, otros solo sus propios registros"""
+    if not CONFIG.excel_reporte.exists():
+        return None
+    df = pd.read_excel(CONFIG.excel_reporte, engine="openpyxl")
+    if usuario == "Admin":
+        return df
+    else:
+        return df[df["Usuario"] == usuario]
 
-def leer_reporte() -> Optional[pd.DataFrame]:
-    """Lee el reporte Excel si existe."""
-    if CONFIG.excel_reporte.exists():
-        return pd.read_excel(CONFIG.excel_reporte, engine="openpyxl")
-    return None
+def exportar_pdf(df: pd.DataFrame, titulo: str) -> bytes:
+    """Genera un PDF con los datos del DataFrame usando reportlab"""
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=letter, topMargin=0.5*inch, bottomMargin=0.5*inch)
+    story = []
+
+    # Estilos
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle(
+        'TitleStyle',
+        parent=styles['Heading1'],
+        fontSize=14,
+        alignment=1,  # centro
+        spaceAfter=12
+    )
+    normal_style = styles['Normal']
+
+    # Título
+    story.append(Paragraph(titulo, title_style))
+    story.append(Spacer(1, 12))
+
+    # Convertir DataFrame a lista de listas para la tabla
+    data = [df.columns.tolist()] + df.values.tolist()
+    table = Table(data)
+    table.setStyle(TableStyle([
+        ('BACKGROUND', (0,0), (-1,0), colors.grey),
+        ('TEXTCOLOR', (0,0), (-1,0), colors.whitesmoke),
+        ('ALIGN', (0,0), (-1,-1), 'CENTER'),
+        ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0,0), (-1,0), 10),
+        ('BOTTOMPADDING', (0,0), (-1,0), 8),
+        ('BACKGROUND', (0,1), (-1,-1), colors.beige),
+        ('GRID', (0,0), (-1,-1), 1, colors.black),
+        ('FONTSIZE', (0,1), (-1,-1), 8),
+    ]))
+    story.append(table)
+    doc.build(story)
+    return buffer.getvalue()
 
 # ============================================================
 # CSS — DISEÑO INDUSTRIAL PROFESIONAL
@@ -169,7 +208,7 @@ html, body, [class*="css"], .stApp {
 
 /* OCULTAR ELEMENTOS INNECESARIOS DE STREAMLIT */
 #MainMenu, footer, header, .stDeployButton { display: none !important; }
-.block-container { padding: 2rem 2.5rem !important; max-width: 1200px !important; }
+.block-container { padding: 1.5rem 2rem 2rem 2rem !important; max-width: 1200px !important; }
 
 /* ── TOPBAR HEADER ── */
 .topbar {
@@ -177,8 +216,8 @@ html, body, [class*="css"], .stApp {
     align-items: center;
     justify-content: space-between;
     border-bottom: 1px solid var(--border);
-    padding-bottom: 1.2rem;
-    margin-bottom: 2rem;
+    padding-bottom: 1rem;
+    margin-bottom: 1.5rem;
 }
 .topbar-brand {
     font-family: var(--font-mono);
@@ -217,13 +256,13 @@ html, body, [class*="css"], .stApp {
     color: var(--text-secondary);
     border-left: 2px solid var(--accent);
     padding-left: 0.75rem;
-    margin: 2rem 0 1.2rem;
+    margin: 1.5rem 0 1rem;
 }
 
 /* ── METRIC CARDS ── */
 .metric-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
     gap: 1px;
     background: var(--border);
     border: 1px solid var(--border);
@@ -233,10 +272,10 @@ html, body, [class*="css"], .stApp {
 }
 .metric-card {
     background: var(--bg-card);
-    padding: 1.2rem 1.5rem;
+    padding: 1rem 1.2rem;
     display: flex;
     flex-direction: column;
-    gap: 0.4rem;
+    gap: 0.3rem;
     transition: background 0.2s;
 }
 .metric-card:hover { background: var(--bg-card-hover); }
@@ -249,7 +288,7 @@ html, body, [class*="css"], .stApp {
 }
 .metric-value {
     font-family: var(--font-mono);
-    font-size: 2rem;
+    font-size: 1.8rem;
     font-weight: 600;
     color: var(--accent);
     line-height: 1;
@@ -274,11 +313,11 @@ html, body, [class*="css"], .stApp {
     letter-spacing: 0.12em;
     text-transform: uppercase;
     color: var(--text-secondary);
-    padding: 0.6rem 0.8rem;
+    padding: 0.5rem 0.8rem;
     font-weight: 500;
 }
 .file-table td {
-    padding: 0.7rem 0.8rem;
+    padding: 0.6rem 0.8rem;
     border-bottom: 1px solid var(--border);
     color: var(--text-primary);
     vertical-align: middle;
@@ -295,23 +334,25 @@ html, body, [class*="css"], .stApp {
 }
 .badge-bak { background: var(--info-dim); color: var(--info); border: 1px solid var(--info); }
 .badge-dat { background: var(--accent-glow); color: var(--accent); border: 1px solid var(--accent-dim); }
+.badge-zip, .badge-rar { background: var(--success-dim); color: var(--success); border: 1px solid var(--success); }
 .badge-error { background: var(--error-dim); color: var(--error); border: 1px solid var(--error); }
 
-/* ── LOGIN PAGE ── */
+/* ── LOGIN PAGE (sin centrado vertical) ── */
 .login-wrapper {
-    min-height: 85vh;
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
+    width: 100%;
+    padding-top: 1rem;
 }
 .login-box {
     background: var(--bg-card);
     border: 1px solid var(--border);
     border-radius: var(--radius);
-    padding: 2.5rem;
+    padding: 2rem;
     width: 100%;
     max-width: 420px;
+    margin-top: 1rem;
 }
 .login-title {
     font-family: var(--font-mono);
@@ -320,13 +361,13 @@ html, body, [class*="css"], .stApp {
     letter-spacing: 0.2em;
     text-transform: uppercase;
     color: var(--accent);
-    margin-bottom: 1.8rem;
+    margin-bottom: 1.5rem;
     text-align: center;
 }
 .login-divider {
     height: 1px;
     background: var(--border);
-    margin: 1.5rem 0;
+    margin: 1.2rem 0;
 }
 
 /* ── INPUTS ── */
@@ -338,8 +379,7 @@ html, body, [class*="css"], .stApp {
     color: var(--text-primary) !important;
     font-family: var(--font-mono) !important;
     font-size: 0.85rem !important;
-    padding: 0.6rem 0.9rem !important;
-    transition: border-color 0.2s !important;
+    padding: 0.5rem 0.8rem !important;
 }
 .stTextInput > div > div > input:focus {
     border-color: var(--accent) !important;
@@ -364,8 +404,7 @@ html, body, [class*="css"], .stApp {
     font-weight: 600 !important;
     letter-spacing: 0.12em !important;
     text-transform: uppercase !important;
-    padding: 0.6rem 1.5rem !important;
-    transition: all 0.2s !important;
+    padding: 0.5rem 1.2rem !important;
 }
 .stButton > button:hover {
     background: #fbbf24 !important;
@@ -381,7 +420,6 @@ html, body, [class*="css"], .stApp {
     border-color: var(--accent) !important;
     color: var(--accent) !important;
     background: var(--accent-glow) !important;
-    box-shadow: none !important;
 }
 
 /* ── FILE UPLOADER ── */
@@ -389,7 +427,6 @@ html, body, [class*="css"], .stApp {
     background: var(--bg-card) !important;
     border: 1px dashed var(--border-light) !important;
     border-radius: var(--radius) !important;
-    transition: border-color 0.2s !important;
 }
 .stFileUploader > div:hover { border-color: var(--accent) !important; }
 .stFileUploader label {
@@ -404,7 +441,6 @@ html, body, [class*="css"], .stApp {
 .stCheckbox > label {
     font-family: var(--font-mono) !important;
     font-size: 0.78rem !important;
-    color: var(--text-primary) !important;
 }
 .stCheckbox > label > span:first-child {
     border: 1px solid var(--border-light) !important;
@@ -415,33 +451,18 @@ html, body, [class*="css"], .stApp {
 .stDataFrame {
     border: 1px solid var(--border) !important;
     border-radius: var(--radius) !important;
-    overflow: hidden !important;
 }
 .stDataFrame th {
     background: var(--bg-secondary) !important;
     font-family: var(--font-mono) !important;
     font-size: 0.6rem !important;
     text-transform: uppercase !important;
-    letter-spacing: 0.1em !important;
-    color: var(--text-secondary) !important;
 }
 .stDataFrame td {
     font-family: var(--font-mono) !important;
     font-size: 0.75rem !important;
-    color: var(--text-primary) !important;
     background: var(--bg-card) !important;
 }
-
-/* ── ALERTS ── */
-.stSuccess, .stError, .stWarning, .stInfo {
-    border-radius: var(--radius) !important;
-    font-family: var(--font-mono) !important;
-    font-size: 0.78rem !important;
-    border: none !important;
-}
-.stSuccess { background: var(--success-dim) !important; color: var(--success) !important; }
-.stError   { background: var(--error-dim) !important;   color: var(--error) !important; }
-.stInfo    { background: var(--info-dim) !important;    color: var(--info) !important; }
 
 /* ── SIDEBAR ── */
 .css-1d391kg, [data-testid="stSidebar"] {
@@ -450,33 +471,18 @@ html, body, [class*="css"], .stApp {
 }
 .css-1d391kg * { font-family: var(--font-mono) !important; }
 
-/* ── SPINNER ── */
+/* ── OTROS ── */
 .stSpinner > div { border-top-color: var(--accent) !important; }
-
-/* ── DOWNLOAD BUTTONS ── */
 .stDownloadButton > button {
     background: transparent !important;
     border: 1px solid var(--border-light) !important;
     color: var(--text-secondary) !important;
-    font-family: var(--font-mono) !important;
-    font-size: 0.65rem !important;
-    letter-spacing: 0.1em !important;
-    text-transform: uppercase !important;
 }
 .stDownloadButton > button:hover {
     border-color: var(--success) !important;
     color: var(--success) !important;
     background: var(--success-dim) !important;
 }
-
-/* ── PROGRESS BAR ── */
-.stProgress > div > div { background: var(--accent) !important; }
-
-/* ── SCROLLBAR ── */
-::-webkit-scrollbar { width: 4px; height: 4px; }
-::-webkit-scrollbar-track { background: var(--bg-primary); }
-::-webkit-scrollbar-thumb { background: var(--border-light); border-radius: 2px; }
-::-webkit-scrollbar-thumb:hover { background: var(--accent); }
 </style>
 """
 
@@ -487,9 +493,7 @@ html, body, [class*="css"], .stApp {
 def render_section_header(text: str, icon: str = ""):
     st.markdown(f'<div class="section-header">{icon} {text}</div>', unsafe_allow_html=True)
 
-
 def render_metric_grid(metrics: list[dict]):
-    """Renderiza tarjetas de métricas. metrics = [{label, value, color}]"""
     cards = ""
     for m in metrics:
         color_class = m.get("color", "")
@@ -500,29 +504,25 @@ def render_metric_grid(metrics: list[dict]):
         </div>"""
     st.markdown(f'<div class="metric-grid">{cards}</div>', unsafe_allow_html=True)
 
-
 def render_file_table(archivos: dict):
-    """Renderiza tabla HTML de archivos con badges de tipo."""
     rows = ""
     for nombre, datos in archivos.items():
         valido, tipo = validate_file(nombre, datos)
         size_kb = round(len(datos) / 1024, 1)
-        badge = f'<span class="badge badge-{tipo}">{tipo.upper()}</span>' if valido else '<span class="badge badge-error">ERR</span>'
+        badge_class = f"badge-{tipo}" if valido else "badge-error"
+        display_tipo = tipo.upper() if valido else "ERR"
         rows += f"""
         <tr>
             <td>{nombre}</td>
-            <td>{badge}</td>
+            <td><span class="badge {badge_class}">{display_tipo}</span></td>
             <td>{size_kb} KB</td>
         </tr>"""
     html = f"""
     <table class="file-table">
-        <thead><tr>
-            <th>Nombre</th><th>Tipo</th><th>Tamaño</th>
-        </tr></thead>
+        <thead><tr><th>Nombre</th><th>Tipo</th><th>Tamaño</th></tr></thead>
         <tbody>{rows}</tbody>
     </table>"""
     st.markdown(html, unsafe_allow_html=True)
-
 
 def render_topbar(usuario: str):
     ts = datetime.now().strftime("%Y-%m-%d  %H:%M")
@@ -534,7 +534,6 @@ def render_topbar(usuario: str):
             {usuario.upper()} &nbsp;·&nbsp; {ts}
         </div>
     </div>""", unsafe_allow_html=True)
-
 
 # ============================================================
 # INICIALIZACIÓN DE SESIÓN
@@ -557,23 +556,18 @@ def init_session():
 
 def pagina_login():
     st.markdown('<div class="login-wrapper">', unsafe_allow_html=True)
-
-    col1, col2, col3 = st.columns([1, 1.6, 1])
+    # Logo centrado y más arriba
+    col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        logo_path = CONFIG.logo_path
-        if os.path.exists(logo_path):
-            st.image(logo_path, use_container_width=True)
-            st.markdown("<br>", unsafe_allow_html=True)
-
+        if os.path.exists(CONFIG.logo_path):
+            st.image(CONFIG.logo_path, use_column_width=True)
         st.markdown('<div class="login-box">', unsafe_allow_html=True)
         st.markdown('<div class="login-title">⬡ &nbsp; ACCESO RESTRINGIDO &nbsp; ⬡</div>', unsafe_allow_html=True)
-
         with st.form("login_form", clear_on_submit=False):
             usuario = st.text_input("Usuario")
             contrasena = st.text_input("Contraseña", type="password")
             st.markdown('<div class="login-divider"></div>', unsafe_allow_html=True)
             submitted = st.form_submit_button("INICIAR SESIÓN", use_container_width=True)
-
             if submitted:
                 if not usuario or not contrasena:
                     st.error("Complete todos los campos.")
@@ -585,16 +579,13 @@ def pagina_login():
                 else:
                     registrar_log(usuario, "LOGIN_FAIL", "Credenciales incorrectas", "ERROR")
                     st.error("Credenciales no válidas.")
-
         st.markdown('</div>', unsafe_allow_html=True)
-
     st.markdown('</div>', unsafe_allow_html=True)
-
 
 def pagina_principal():
     usuario = st.session_state.usuario_activo
 
-    # Sidebar compacto
+    # Sidebar compacto (siempre visible)
     with st.sidebar:
         st.markdown(f"""
         <div style="font-family:var(--font-mono);font-size:0.6rem;letter-spacing:0.12em;
@@ -610,58 +601,68 @@ def pagina_principal():
         if st.button("CERRAR SESIÓN", type="secondary", use_container_width=True):
             registrar_log(usuario, "LOGOUT", "Cierre manual de sesión")
             for key in ["logged_in", "usuario_activo", "archivos_subidos", "resultados_proceso"]:
-                st.session_state[key] = False if key == "logged_in" else (None if key == "usuario_activo" else {})
+                if key == "logged_in":
+                    st.session_state[key] = False
+                elif key == "usuario_activo":
+                    st.session_state[key] = None
+                else:
+                    st.session_state[key] = {}
             st.rerun()
 
         st.markdown("<br>", unsafe_allow_html=True)
 
-        # Stats rápidas en sidebar
+        # Stats de la cola (se actualizan tras procesar)
         arch = st.session_state.archivos_subidos
-        n_bak = sum(1 for n, d in arch.items() if validate_file(n, d)[1] == "bak")
-        n_dat = sum(1 for n, d in arch.items() if validate_file(n, d)[1] == "dat")
-
+        n_bak = 0
+        n_dat = 0
+        n_zip = 0
+        n_rar = 0
+        for fn, data in arch.items():
+            val, typ = validate_file(fn, data)
+            if val:
+                if typ == "bak": n_bak += 1
+                elif typ == "dat": n_dat += 1
+                elif typ == "zip": n_zip += 1
+                elif typ == "rar": n_rar += 1
         st.markdown(f"""
         <div style="font-family:var(--font-mono);font-size:0.6rem;letter-spacing:0.1em;
                     text-transform:uppercase;color:#8b95a8;margin-bottom:0.8rem">
             Cola de archivos
         </div>
-        <div style="display:flex;flex-direction:column;gap:0.4rem">
+        <div style="display:flex;flex-direction:column;gap:0.3rem">
             <div style="display:flex;justify-content:space-between;font-family:var(--font-mono);font-size:0.75rem">
-                <span style="color:#3b82f6">BAK</span><span style="color:#e8eaf0">{n_bak}</span>
+                <span style="color:#3b82f6">BAK</span><span>{n_bak}</span>
             </div>
             <div style="display:flex;justify-content:space-between;font-family:var(--font-mono);font-size:0.75rem">
-                <span style="color:#f59e0b">DAT</span><span style="color:#e8eaf0">{n_dat}</span>
+                <span style="color:#f59e0b">DAT</span><span>{n_dat}</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;font-family:var(--font-mono);font-size:0.75rem">
+                <span style="color:#10b981">ZIP/RAR</span><span>{n_zip + n_rar}</span>
             </div>
             <div style="display:flex;justify-content:space-between;font-family:var(--font-mono);font-size:0.75rem;
                         border-top:1px solid #2a3040;padding-top:0.4rem;margin-top:0.2rem">
-                <span style="color:#8b95a8">TOTAL</span><span style="color:#e8eaf0">{len(arch)}</span>
+                <span style="color:#8b95a8">TOTAL</span><span>{len(arch)}</span>
             </div>
         </div>
         """, unsafe_allow_html=True)
 
-    # ── TOPBAR ──
+    # Topbar
     render_topbar(usuario)
 
-    # ── LOGO ──
-    logo_path = CONFIG.logo_path
-    if os.path.exists(logo_path):
+    # Logo principal
+    if os.path.exists(CONFIG.logo_path):
         col_l, col_m, col_r = st.columns([1, 2, 1])
         with col_m:
-            st.image(logo_path, use_container_width=True)
+            st.image(CONFIG.logo_path, use_column_width=True)
         st.markdown("<br>", unsafe_allow_html=True)
 
-    # ══════════════════════════════════════
-    # SECCIÓN 1: SUBIR ARCHIVOS
-    # ══════════════════════════════════════
+    # Sección 1: Subir archivos
     render_section_header("SUBIR ARCHIVOS", "01")
-
     uploaded_files = st.file_uploader(
-        "Arrastre o seleccione archivos (.bak / .dat)",
-        type=["bak", "dat"],
+        "Arrastre o seleccione archivos (.bak / .dat / .zip / .rar)",
+        type=["bak", "dat", "zip", "rar"],
         accept_multiple_files=True,
-        label_visibility="visible",
     )
-
     if uploaded_files:
         nuevos = 0
         for file in uploaded_files:
@@ -671,42 +672,32 @@ def pagina_principal():
         if nuevos:
             st.success(f"✓ {nuevos} archivo(s) nuevo(s) agregado(s) a la cola.")
 
-    st.markdown("<br>", unsafe_allow_html=True)
-
-    # ══════════════════════════════════════
-    # SECCIÓN 2: COLA DE ARCHIVOS
-    # ══════════════════════════════════════
+    # Sección 2: Cola de archivos
     arch = st.session_state.archivos_subidos
-
     if arch:
         render_section_header("COLA DE PROCESO", "02")
-
         # Métricas
-        n_bak = sum(1 for n, d in arch.items() if validate_file(n, d)[1] == "bak")
-        n_dat = sum(1 for n, d in arch.items() if validate_file(n, d)[1] == "dat")
-        n_err = sum(1 for n, d in arch.items() if not validate_file(n, d)[0])
+        n_bak = sum(1 for n,d in arch.items() if validate_file(n,d)[1]=="bak")
+        n_dat = sum(1 for n,d in arch.items() if validate_file(n,d)[1]=="dat")
+        n_comp = sum(1 for n,d in arch.items() if validate_file(n,d)[1] in ["zip","rar"])
+        n_err = sum(1 for n,d in arch.items() if not validate_file(n,d)[0])
         total_kb = round(sum(len(d) for d in arch.values()) / 1024, 1)
-
         render_metric_grid([
             {"label": "Total Archivos", "value": len(arch)},
-            {"label": "BAK (SQL)",      "value": n_bak, "color": ""},
-            {"label": "DAT",            "value": n_dat, "color": ""},
+            {"label": "BAK (SQL)",      "value": n_bak},
+            {"label": "DAT",            "value": n_dat},
+            {"label": "ZIP / RAR",      "value": n_comp},
             {"label": "No soportados",  "value": n_err, "color": "red" if n_err else ""},
             {"label": "Tamaño total",   "value": f"{total_kb} KB"},
         ])
-
-        # Tabla de archivos
         render_file_table(arch)
 
-        # ── SELECCIÓN Y PROCESO ──
         render_section_header("SELECCIÓN DE ARCHIVOS", "03")
-
-        col_sel, col_clear = st.columns([4, 1])
+        col_sel, col_clear = st.columns([4,1])
         with col_clear:
             if st.button("LIMPIAR COLA", type="secondary"):
                 st.session_state.archivos_subidos = {}
                 st.rerun()
-
         seleccionados = {}
         for nombre in arch:
             valido, tipo = validate_file(nombre, arch[nombre])
@@ -714,30 +705,22 @@ def pagina_principal():
             seleccionados[nombre] = st.checkbox(label, value=valido, key=f"cb_{nombre}", disabled=not valido)
             if not valido:
                 st.caption(f"  ↳ ⚠ {tipo}")
-
-        n_sel = sum(1 for v in seleccionados.values() if v)
-        st.markdown(f"""
-        <div style="font-family:var(--font-mono);font-size:0.65rem;color:#8b95a8;margin:0.8rem 0">
-            {n_sel} de {len(arch)} archivo(s) seleccionado(s)
-        </div>""", unsafe_allow_html=True)
+        n_sel = sum(sel for sel in seleccionados.values())
+        st.markdown(f'<div style="font-family:var(--font-mono);font-size:0.65rem;color:#8b95a8;margin:0.5rem 0">{n_sel} de {len(arch)} archivo(s) seleccionado(s)</div>', unsafe_allow_html=True)
 
         if st.button(f"▶  PROCESAR {n_sel} ARCHIVO(S)", use_container_width=True):
             archivos_a_procesar = [n for n, sel in seleccionados.items() if sel]
-
             if not archivos_a_procesar:
                 st.warning("Seleccione al menos un archivo.")
             else:
                 resultados = []
                 progress_bar = st.progress(0)
                 total = len(archivos_a_procesar)
-
+                contadores = {"bak":0, "dat":0, "zip":0, "rar":0, "error":0}
                 with st.spinner(f"Procesando {total} archivo(s)..."):
-                    contadores = {"bak": 0, "dat": 0, "error": 0}
-
                     for i, nombre in enumerate(archivos_a_procesar):
                         datos = arch[nombre]
                         valido, tipo = validate_file(nombre, datos)
-
                         if not valido:
                             resultados.append({"archivo": nombre, "estado": "ERROR", "detalle": tipo})
                             contadores["error"] += 1
@@ -746,40 +729,35 @@ def pagina_principal():
                             if tipo == "bak":
                                 res = process_bak(ruta, usuario)
                                 contadores["bak"] += 1
-                            else:
+                            elif tipo == "dat":
                                 res = process_dat(ruta, usuario)
                                 contadores["dat"] += 1
+                            else:  # zip o rar
+                                res = process_compressed(ruta, usuario, tipo)
+                                contadores[tipo] += 1
                             resultados.append({"archivo": nombre, "estado": "OK", "detalle": str(ruta)})
+                        progress_bar.progress((i+1)/total)
 
-                        progress_bar.progress((i + 1) / total)
+                # Actualizar reporte Excel solo con BAK y DAT
+                total_bak_dat = contadores["bak"] + contadores["dat"]
+                if total_bak_dat > 0:
+                    actualizar_reporte_excel(usuario, total_bak_dat, contadores["bak"], contadores["dat"])
 
-                    total_ok = contadores["bak"] + contadores["dat"]
-                    if total_ok:
-                        actualizar_reporte_excel(usuario, total_ok, contadores["bak"], contadores["dat"])
-
-                # Limpiar archivos procesados (solo los OK)
+                # Limpiar archivos procesados (todos los seleccionados)
                 for r in resultados:
-                    if r["estado"] == "OK" and r["archivo"] in st.session_state.archivos_subidos:
+                    if r["archivo"] in st.session_state.archivos_subidos:
                         del st.session_state.archivos_subidos[r["archivo"]]
-
                 st.session_state.resultados_proceso = resultados
-
-                if total_ok == total:
-                    st.balloons()
-                    st.success(f"✓ Lote completado — {total_ok} archivo(s) procesados correctamente.")
-                else:
-                    st.warning(f"Lote con errores — {total_ok} OK / {contadores['error']} fallidos.")
-
                 st.rerun()
 
     else:
         st.markdown("""
         <div style="border:1px dashed #2a3040;border-radius:6px;padding:2rem;text-align:center;
                     font-family:'IBM Plex Mono',monospace;font-size:0.75rem;color:#8b95a8;margin:1rem 0">
-            Cola vacía — Suba archivos .bak o .dat para comenzar
+            Cola vacía — Suba archivos .bak, .dat, .zip o .rar para comenzar
         </div>""", unsafe_allow_html=True)
 
-    # ── RESULTADOS DEL ÚLTIMO PROCESO ──
+    # Mostrar resultados del último proceso
     if st.session_state.get("resultados_proceso"):
         render_section_header("RESULTADO DEL ÚLTIMO LOTE", "04")
         for r in st.session_state.resultados_proceso:
@@ -788,55 +766,40 @@ def pagina_principal():
             else:
                 st.error(f"✗ {r['archivo']} — {r['detalle']}")
 
-    # ══════════════════════════════════════
-    # SECCIÓN: REPORTE DE ACTIVIDAD
-    # ══════════════════════════════════════
+    # Sección Reporte de Actividad
     render_section_header("REPORTE DE ACTIVIDAD", "05")
-
-    df_reporte = leer_reporte()
-    if df_reporte is not None:
-        # Totales rápidos
+    df_reporte = leer_reporte(usuario)  # ya filtrado por rol
+    if df_reporte is not None and not df_reporte.empty:
+        # Métricas adicionales según lo que ve el usuario
+        total_registros = len(df_reporte)
+        total_bak = int(df_reporte["Cantidad_BAK"].sum())
+        total_dat = int(df_reporte["Cantidad_DAT"].sum())
+        total_archivos = int(df_reporte["Total_Subidos"].sum())
         render_metric_grid([
-            {"label": "Sesiones registradas", "value": len(df_reporte), "color": "green"},
-            {"label": "BAK procesados",        "value": int(df_reporte["Cantidad_BAK"].sum())},
-            {"label": "DAT procesados",        "value": int(df_reporte["Cantidad_DAT"].sum())},
-            {"label": "Total archivos",        "value": int(df_reporte["Total_Subidos"].sum())},
+            {"label": "Sesiones registradas", "value": total_registros, "color": "green"},
+            {"label": "BAK procesados",        "value": total_bak},
+            {"label": "DAT procesados",        "value": total_dat},
+            {"label": "Total archivos",        "value": total_archivos},
         ])
+        st.dataframe(df_reporte.sort_values("Fecha", ascending=False), use_container_width=True, hide_index=True)
 
-        st.dataframe(
-            df_reporte.sort_values("Fecha", ascending=False),
-            use_container_width=True,
-            hide_index=True,
-        )
-
-        col_dl1, col_dl2, col_spacer = st.columns([1, 1, 2])
+        # Descargas según rol
+        col_dl1, col_dl2, col_spacer = st.columns([1,1,2])
+        # PDF siempre disponible
+        pdf_bytes = exportar_pdf(df_reporte, f"Reporte Actividad - {usuario}")
         with col_dl1:
-            buf_excel = io.BytesIO()
-            with pd.ExcelWriter(buf_excel, engine="openpyxl") as writer:
-                df_reporte.to_excel(writer, index=False)
-            st.download_button(
-                "⬇ EXCEL",
-                data=buf_excel.getvalue(),
-                file_name=f"reporte_{datetime.now().strftime('%Y%m%d')}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True,
-            )
-        with col_dl2:
-            csv_bytes = df_reporte.to_csv(index=False, encoding="utf-8-sig").encode("utf-8-sig")
-            st.download_button(
-                "⬇ CSV",
-                data=csv_bytes,
-                file_name=f"reporte_{datetime.now().strftime('%Y%m%d')}.csv",
-                mime="text/csv",
-                use_container_width=True,
-            )
+            st.download_button("⬇ PDF", data=pdf_bytes, file_name=f"reporte_{usuario}_{datetime.now().strftime('%Y%m%d')}.pdf", mime="application/pdf", use_container_width=True)
+        # CSV solo para Admin
+        if usuario == "Admin":
+            with col_dl2:
+                csv_bytes = df_reporte.to_csv(index=False, encoding="utf-8-sig").encode("utf-8-sig")
+                st.download_button("⬇ CSV", data=csv_bytes, file_name=f"reporte_{datetime.now().strftime('%Y%m%d')}.csv", mime="text/csv", use_container_width=True)
     else:
         st.markdown("""
         <div style="border:1px dashed #2a3040;border-radius:6px;padding:2rem;text-align:center;
                     font-family:'IBM Plex Mono',monospace;font-size:0.75rem;color:#8b95a8">
-            Sin datos de actividad — Procese archivos para generar el reporte
+            Sin datos de actividad — Procese archivos BAK o DAT para generar el reporte.
         </div>""", unsafe_allow_html=True)
-
 
 # ============================================================
 # ENTRYPOINT
@@ -845,7 +808,7 @@ def pagina_principal():
 st.set_page_config(
     page_title="Backup Central | TRC",
     layout="wide",
-    initial_sidebar_state="collapsed",
+    initial_sidebar_state="expanded",   # sidebar visible por defecto
 )
 st.markdown(CSS, unsafe_allow_html=True)
 
@@ -855,4 +818,3 @@ if not st.session_state.logged_in:
     pagina_login()
 else:
     pagina_principal()
-    
