@@ -92,18 +92,26 @@ def actualizar_reporte_excel(usuario, total_procesados, cant_bak, cant_dat):
 # ------------------------------------------------------------
 st.set_page_config(page_title="Gestor de Backups", layout="wide")
 
-# --- CSS personalizado: fuente Courier y ancho uniforme de inputs ---
+# --- CSS personalizado: fuente Courier, títulos en mayúsculas, inputs funcionales ---
 st.markdown("""
 <style>
     /* Fuente Courier para toda la aplicación */
-    html, body, .stApp, div, p, span, label, .stTextInput, .stTextInput>div>div>input, 
-    .stSelectbox, .stTextArea, .stButton, .stDataFrame, .stMarkdown, h1, h2, h3, h4, h5, h6 {
-        font-family: 'Courier New', Courier, monospace !important;
+    * {
+        font-family: 'Courier', 'Courier New', monospace !important;
     }
-    /* Ancho fijo para los campos de texto (igual al logo) */
+    /* Títulos siempre en mayúsculas */
+    h1, h2, h3, h4, h5, h6, .stMarkdown h1, .stMarkdown h2, .stMarkdown h3, .stMarkdown h4, .stMarkdown h5, .stMarkdown h6 {
+        text-transform: uppercase !important;
+    }
+    /* Inputs con ancho fijo de 280px (mismo que el logo) y funcionales */
     .stTextInput > div > div > input {
         width: 280px !important;
         margin: 0 auto;
+        font-family: 'Courier', 'Courier New', monospace !important;
+    }
+    /* Asegurar que los botones también usen Courier */
+    .stButton > button {
+        font-family: 'Courier', 'Courier New', monospace !important;
     }
     /* Centrar el formulario de login */
     .centered-login {
@@ -111,10 +119,6 @@ st.markdown("""
         justify-content: center;
         align-items: center;
         flex-direction: column;
-    }
-    /* Ajuste adicional para el botón */
-    .stButton > button {
-        font-family: 'Courier New', Courier, monospace;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -129,7 +133,6 @@ if "logged_in" not in st.session_state:
 
 if not st.session_state.logged_in:
     # --- CENTRADO COMPLETO DE LA PÁGINA DE VALIDACIÓN ---
-    # Contenedor centrado para todo el contenido de login
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
         # Logo centrado con el mismo ancho que los inputs (280px)
@@ -138,11 +141,11 @@ if not st.session_state.logged_in:
         else:
             st.warning("LogoBlack.jpeg no encontrado. Añade el archivo a la raíz del proyecto.")
         
-        st.subheader("🔐 Acceso restringido")
+        st.subheader("🔐 ACCESO RESTRINGIDO")  # ← En mayúsculas
         with st.form("login_form"):
             usuario = st.text_input("Usuario")
             contrasena = st.text_input("Contraseña", type="password")
-            submitted = st.form_submit_button("Iniciar sesión")
+            submitted = st.form_submit_button("INICIAR SESIÓN")  # También en mayúsculas por estilo
             if submitted:
                 if usuario in USUARIOS_VALIDOS and contrasena == CONTRASENA_COMPARTIDA:
                     st.session_state.logged_in = True
@@ -164,13 +167,13 @@ if st.sidebar.button("Cerrar sesión"):
     st.rerun()
 
 # --- Área principal después del login ---
-st.title("📦 Central de Backups")
+st.title("📦 CENTRAL DE BACKUPS")  # Título en mayúsculas
 
-# Se puede mostrar el logo también en el área principal (opcional)
+# Mostrar logo opcional
 if os.path.exists(logo_path):
     st.image(logo_path, width=280)
 
-st.header("📤 Subir archivos")
+st.header("📤 SUBIR ARCHIVOS")
 uploaded_files = st.file_uploader(
     "Seleccione uno o varios archivos (.bak / .dat)",
     type=["bak", "dat"],
@@ -190,7 +193,7 @@ if uploaded_files:
 
 # Mostrar resumen de archivos subidos
 if st.session_state.archivos_subidos:
-    st.subheader("📋 Archivos en espera")
+    st.subheader("📋 ARCHIVOS EN ESPERA")
     resumen = {"bak": 0, "dat": 0, "error": 0}
     for nombre, datos in st.session_state.archivos_subidos.items():
         valido, tipo = validate_file(nombre, datos)
@@ -207,12 +210,12 @@ else:
 
 # --- Selección de archivos a procesar ---
 if st.session_state.archivos_subidos:
-    st.subheader("✔️ Seleccione los archivos a procesar")
+    st.subheader("✔️ SELECCIONE LOS ARCHIVOS A PROCESAR")
     seleccionados = {}
     for nombre in st.session_state.archivos_subidos.keys():
         seleccionados[nombre] = st.checkbox(nombre, value=True, key=f"cb_{nombre}")
 
-    if st.button("🚀 Procesar archivos seleccionados"):
+    if st.button("🚀 PROCESAR ARCHIVOS SELECCIONADOS"):
         archivos_a_procesar = [nom for nom, sel in seleccionados.items() if sel]
         if not archivos_a_procesar:
             st.warning("No seleccionó ningún archivo.")
@@ -227,10 +230,8 @@ if st.session_state.archivos_subidos:
                         st.error(f"❌ {nombre}: {tipo} - No se procesará.")
                         continue
 
-                    # Guardar físicamente (sin ID tienda)
                     ruta = guardar_archivo(nombre, datos, tipo, usuario_actual)
 
-                    # Procesar según tipo
                     if tipo == "bak":
                         process_bak(ruta, usuario_actual)
                         contadores["bak"] += 1
@@ -241,32 +242,29 @@ if st.session_state.archivos_subidos:
                     total_procesados += 1
                     st.success(f"✅ {nombre} procesado correctamente.")
 
-                # Actualizar reporte Excel (sin columna Tienda)
                 actualizar_reporte_excel(usuario_actual, total_procesados, contadores["bak"], contadores["dat"])
                 st.balloons()
                 st.success(f"🎉 Lote finalizado: {total_procesados} archivos procesados.")
 
-                # Eliminar los archivos procesados de session_state
                 for nom in archivos_a_procesar:
                     if nom in st.session_state.archivos_subidos:
                         del st.session_state.archivos_subidos[nom]
                 st.rerun()
 
 # --- Reporte ---
-st.header("📊 Reporte de actividad")
+st.header("📊 REPORTE DE ACTIVIDAD")
 
 if os.path.exists(EXCEL_REPORTE):
     df_reporte = pd.read_excel(EXCEL_REPORTE, engine='openpyxl')
     st.dataframe(df_reporte)
 
-    # Botones de descarga
     col1, col2 = st.columns(2)
     with col1:
         output_excel = io.BytesIO()
         with pd.ExcelWriter(output_excel, engine='openpyxl') as writer:
             df_reporte.to_excel(writer, index=False)
         st.download_button(
-            label="📥 Descargar reporte Excel",
+            label="📥 DESCARGAR REPORTE EXCEL",
             data=output_excel.getvalue(),
             file_name="reporte_actividad.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -274,7 +272,7 @@ if os.path.exists(EXCEL_REPORTE):
     with col2:
         csv = df_reporte.to_csv(index=False, encoding='utf-8-sig')
         st.download_button(
-            label="📥 Descargar reporte CSV",
+            label="📥 DESCARGAR REPORTE CSV",
             data=csv,
             file_name="reporte_actividad.csv",
             mime="text/csv"
