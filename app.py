@@ -92,38 +92,36 @@ def actualizar_reporte_excel(usuario, total_procesados, cant_bak, cant_dat):
 # ------------------------------------------------------------
 st.set_page_config(page_title="Gestor de Backups", layout="wide")
 
-# --- CSS personalizado: fuente Courier, títulos en mayúsculas, inputs funcionales ---
+# --- CSS personalizado: fuente Avenir Light, títulos en mayúsculas, inputs funcionales ---
 st.markdown("""
 <style>
-    /* Fuente Courier para toda la aplicación */
-    * {
-        font-family: 'Courier', 'Courier New', monospace !important;
+    /* Fuente principal: Avenir Light */
+    html, body, .stApp, div, p, span, label, input, button, .stTextInput, 
+    .stSelectbox, .stTextArea, .stButton, .stDataFrame, .stMarkdown {
+        font-family: 'Avenir Light', 'Avenir', 'Helvetica Neue', Helvetica, sans-serif !important;
     }
+
     /* Títulos siempre en mayúsculas */
-    h1, h2, h3, h4, h5, h6, .stMarkdown h1, .stMarkdown h2, .stMarkdown h3, .stMarkdown h4, .stMarkdown h5, .stMarkdown h6 {
+    h1, h2, h3, h4, h5, h6, .stMarkdown h1, .stMarkdown h2, .stMarkdown h3,
+    .stSubheader, .stHeader {
         text-transform: uppercase !important;
     }
-    /* Inputs con ancho fijo de 280px (mismo que el logo) y funcionales */
+
+    /* Asegurar que los inputs sean plenamente funcionales y sin centrado forzado */
     .stTextInput > div > div > input {
-        width: 280px !important;
-        margin: 0 auto;
-        font-family: 'Courier', 'Courier New', monospace !important;
+        text-align: left !important;
+        width: auto !important;
+        margin: 0 !important;
     }
-    /* Asegurar que los botones también usen Courier */
+
+    /* Opcional: botones */
     .stButton > button {
-        font-family: 'Courier', 'Courier New', monospace !important;
-    }
-    /* Centrar el formulario de login */
-    .centered-login {
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        flex-direction: column;
+        font-family: 'Avenir Light', 'Avenir', 'Helvetica Neue', Helvetica, sans-serif;
     }
 </style>
 """, unsafe_allow_html=True)
 
-# Logo (se seguirá usando en la página de login y en el área principal)
+# Logo (se usará en login y área principal)
 logo_path = "LogoBlack.jpeg"
 
 # --- Autenticación ---
@@ -132,20 +130,26 @@ if "logged_in" not in st.session_state:
     st.session_state.usuario_activo = None
 
 if not st.session_state.logged_in:
-    # --- CENTRADO COMPLETO DE LA PÁGINA DE VALIDACIÓN ---
+    # Página de login: solo el logo centrado, los campos a la izquierda
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        # Logo centrado con el mismo ancho que los inputs (280px)
+        # Logo centrado (ancho 800)
         if os.path.exists(logo_path):
-            st.image(logo_path, width=280)
+            # Usar HTML para centrar la imagen (Streamlit image con use_container_width=False no centra fácilmente)
+            st.markdown(
+                f'<div style="display: flex; justify-content: center;">'
+                f'<img src="data:image/jpeg;base64,{get_base64_image(logo_path)}" width="800">'
+                f'</div>',
+                unsafe_allow_html=True
+            )
         else:
             st.warning("LogoBlack.jpeg no encontrado. Añade el archivo a la raíz del proyecto.")
-        
-        st.subheader("🔐 ACCESO RESTRINGIDO")  # ← En mayúsculas
+
+        st.subheader("🔐 ACCESO RESTRINGIDO")
         with st.form("login_form"):
             usuario = st.text_input("Usuario")
             contrasena = st.text_input("Contraseña", type="password")
-            submitted = st.form_submit_button("INICIAR SESIÓN")  # También en mayúsculas por estilo
+            submitted = st.form_submit_button("Iniciar sesión")
             if submitted:
                 if usuario in USUARIOS_VALIDOS and contrasena == CONTRASENA_COMPARTIDA:
                     st.session_state.logged_in = True
@@ -167,11 +171,15 @@ if st.sidebar.button("Cerrar sesión"):
     st.rerun()
 
 # --- Área principal después del login ---
-st.title("📦 CENTRAL DE BACKUPS")  # Título en mayúsculas
+st.title("📦 CENTRAL DE BACKUPS")
 
-# Mostrar logo opcional
+# Logo centrado en área principal (ancho 800)
 if os.path.exists(logo_path):
-    st.image(logo_path, width=280)
+    col_logo1, col_logo2, col_logo3 = st.columns([1, 2, 1])
+    with col_logo2:
+        st.image(logo_path, width=800)
+else:
+    st.warning("LogoBlack.jpeg no encontrado.")
 
 st.header("📤 SUBIR ARCHIVOS")
 uploaded_files = st.file_uploader(
@@ -230,8 +238,10 @@ if st.session_state.archivos_subidos:
                         st.error(f"❌ {nombre}: {tipo} - No se procesará.")
                         continue
 
+                    # Guardar físicamente (sin ID tienda)
                     ruta = guardar_archivo(nombre, datos, tipo, usuario_actual)
 
+                    # Procesar según tipo
                     if tipo == "bak":
                         process_bak(ruta, usuario_actual)
                         contadores["bak"] += 1
@@ -242,10 +252,12 @@ if st.session_state.archivos_subidos:
                     total_procesados += 1
                     st.success(f"✅ {nombre} procesado correctamente.")
 
+                # Actualizar reporte Excel (sin columna Tienda)
                 actualizar_reporte_excel(usuario_actual, total_procesados, contadores["bak"], contadores["dat"])
                 st.balloons()
                 st.success(f"🎉 Lote finalizado: {total_procesados} archivos procesados.")
 
+                # Eliminar los archivos procesados de session_state
                 for nom in archivos_a_procesar:
                     if nom in st.session_state.archivos_subidos:
                         del st.session_state.archivos_subidos[nom]
@@ -258,6 +270,7 @@ if os.path.exists(EXCEL_REPORTE):
     df_reporte = pd.read_excel(EXCEL_REPORTE, engine='openpyxl')
     st.dataframe(df_reporte)
 
+    # Botones de descarga
     col1, col2 = st.columns(2)
     with col1:
         output_excel = io.BytesIO()
@@ -279,3 +292,9 @@ if os.path.exists(EXCEL_REPORTE):
         )
 else:
     st.info("Aún no se ha generado ningún reporte. Procese archivos para crearlo.")
+
+# Función auxiliar para convertir imagen a base64 (para centrar el logo en login)
+import base64
+def get_base64_image(image_path):
+    with open(image_path, "rb") as img_file:
+        return base64.b64encode(img_file.read()).decode()
