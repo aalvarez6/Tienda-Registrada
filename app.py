@@ -523,17 +523,50 @@ div.css-ocqkz7,
 [data-testid="stFileUploader"] section:hover {
     border-color: var(--accent) !important;
 }
-/* Ocultar TODOS los spans y svgs dentro del dropzone (causa del doble texto) */
-[data-testid="stFileUploaderDropzoneInstructions"] > div > span,
-[data-testid="stFileUploaderDropzoneInstructions"] > div > span + span,
-[data-testid="stFileUploaderDropzoneInstructions"] span:not(:first-of-type),
+/* Ocultar COMPLETAMENTE el botón nativo (causa del "uploadupload") */
+[data-testid="stFileUploaderDropzone"] button,
+[data-testid="stFileUploaderDropzone"] button * {
+    opacity: 0 !important;
+    pointer-events: none !important;
+    width: 0 !important;
+    height: 0 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    border: none !important;
+    overflow: hidden !important;
+}
+/* Ocultar SVG duplicado */
 [data-testid="stFileUploaderDropzone"] svg { display: none !important; }
-/* Mantener solo el primer span visible y estilizado */
-[data-testid="stFileUploaderDropzoneInstructions"] > div > span:first-of-type {
-    display: block !important;
+/* Reemplazar instrucciones con texto limpio */
+[data-testid="stFileUploaderDropzoneInstructions"] {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    padding: 1.2rem !important;
+}
+[data-testid="stFileUploaderDropzoneInstructions"] > div {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    gap: 0.3rem !important;
+}
+[data-testid="stFileUploaderDropzoneInstructions"] > div > span {
+    display: none !important;
+}
+[data-testid="stFileUploaderDropzoneInstructions"] > div::before {
+    content: "⬆  Arrastre archivos aquí o haga clic";
     font-family: var(--font-avenir) !important;
-    font-size: 0.82rem !important;
+    font-size: 0.85rem !important;
     color: var(--text-secondary) !important;
+    display: block !important;
+}
+[data-testid="stFileUploaderDropzoneInstructions"] > div::after {
+    content: ".BAK  ·  .DAT  ·  .ZIP  ·  .RAR  ·  máx. 200 MB";
+    font-family: var(--font-avenir) !important;
+    font-size: 0.65rem !important;
+    color: var(--border-light) !important;
+    letter-spacing: 0.08em !important;
+    display: block !important;
 }
 [data-testid="stFileUploader"] label {
     font-family:    var(--font-avenir) !important;
@@ -541,18 +574,6 @@ div.css-ocqkz7,
     letter-spacing: 0.08em !important;
     text-transform: uppercase !important;
     color:          var(--text-secondary) !important;
-}
-[data-testid="stFileUploader"] button[data-testid="baseButton-secondary"] {
-    font-family:   var(--font-avenir) !important;
-    background:    transparent !important;
-    border:        1px solid var(--border-light) !important;
-    color:         var(--text-secondary) !important;
-    border-radius: var(--radius) !important;
-    font-size:     0.72rem !important;
-}
-[data-testid="stFileUploader"] button[data-testid="baseButton-secondary"]:hover {
-    border-color: var(--accent) !important;
-    color:        var(--accent) !important;
 }
 
 /* ── CHECKBOXES ── */
@@ -623,16 +644,16 @@ div.css-ocqkz7,
     background:   var(--success-dim) !important;
 }
 
-/* ── BOTÓN CERRAR SESIÓN (azul, topbar izquierda) ── */
-div[data-testid="column"]:first-child .stButton > button {
-    background:   #1d4ed8 !important;
-    color:        #ffffff !important;
-    border:       none !important;
-    box-shadow:   0 0 14px rgba(29,78,216,0.35) !important;
-    font-size:    0.68rem !important;
+/* ── BOTÓN CERRAR SESIÓN (azul, topbar derecha) ── */
+div[data-testid="column"]:last-child .stButton > button {
+    background:     #1d4ed8 !important;
+    color:          #ffffff !important;
+    border:         none !important;
+    box-shadow:     0 0 14px rgba(29,78,216,0.35) !important;
+    font-size:      0.68rem !important;
     letter-spacing: 0.1em !important;
 }
-div[data-testid="column"]:first-child .stButton > button:hover {
+div[data-testid="column"]:last-child .stButton > button:hover {
     background:  #2563eb !important;
     box-shadow:  0 0 22px rgba(37,99,235,0.55) !important;
     transform:   translateY(-1px) !important;
@@ -801,18 +822,9 @@ def pagina_principal() -> None:
     n_zip = sum(1 for n, d in arch.items() if validate_file(n, d)[1] == "zip")
     n_rar = sum(1 for n, d in arch.items() if validate_file(n, d)[1] == "rar")
 
-    # ── TOPBAR: [Botón Cerrar Sesión] [Marca] [Usuario · Hora] ──
+    # ── TOPBAR: [Marca] [Usuario · Hora] [Botón Cerrar Sesión] ──
     ts = datetime.now().strftime("%Y-%m-%d  %H:%M")
-    col_btn, col_brand, col_status = st.columns([1.4, 3, 2])
-
-    with col_btn:
-        if st.button("⏻  CERRAR SESIÓN", key="btn_logout", use_container_width=True):
-            registrar_log(usuario, "LOGOUT", "Cierre de sesión")
-            st.session_state.logged_in          = False
-            st.session_state.usuario_activo     = None
-            st.session_state.archivos_subidos   = {}
-            st.session_state.resultados_proceso = []
-            st.rerun()
+    col_brand, col_status, col_btn = st.columns([3, 2, 1.4])
 
     with col_brand:
         st.markdown(
@@ -834,6 +846,15 @@ def pagina_principal() -> None:
             unsafe_allow_html=True,
         )
 
+    with col_btn:
+        if st.button("⏻  CERRAR SESIÓN", key="btn_logout", use_container_width=True):
+            registrar_log(usuario, "LOGOUT", "Cierre de sesión")
+            st.session_state.logged_in          = False
+            st.session_state.usuario_activo     = None
+            st.session_state.archivos_subidos   = {}
+            st.session_state.resultados_proceso = []
+            st.rerun()
+
     st.markdown(
         '<div style="height:1px;background:#2a3040;margin:0.4rem 0 1.6rem"></div>',
         unsafe_allow_html=True,
@@ -845,18 +866,6 @@ def pagina_principal() -> None:
         with cm:
             st.image(CONFIG.logo_path, use_container_width=True)
         st.markdown("<br>", unsafe_allow_html=True)
-
-    # ── COLA RESUMEN (en topbar secundario) ──
-    st.markdown(f"""
-    <div style="display:flex;gap:1.5rem;margin-bottom:1.5rem;
-                font-family:'IBM Plex Mono',monospace;font-size:0.7rem">
-        <span style="color:#8b95a8">COLA:</span>
-        <span style="color:#3b82f6">BAK&nbsp;<b>{n_bak}</b></span>
-        <span style="color:#f59e0b">DAT&nbsp;<b>{n_dat}</b></span>
-        <span style="color:#8b5cf6">ZIP&nbsp;<b>{n_zip}</b></span>
-        <span style="color:#ec4899">RAR&nbsp;<b>{n_rar}</b></span>
-        <span style="color:#8b95a8">TOTAL&nbsp;<b>{len(arch)}</b></span>
-    </div>""", unsafe_allow_html=True)
 
     # ════════════════════════════
     # 01 — SUBIR ARCHIVOS
