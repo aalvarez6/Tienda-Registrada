@@ -260,7 +260,10 @@ html, body, .stApp,
 .stDeployButton,
 [data-testid="stToolbar"],
 [data-testid="stDecoration"],
-[data-testid="stStatusWidget"] { display: none !important; }
+[data-testid="stStatusWidget"],
+[data-testid="stSidebar"],
+[data-testid="collapsedControl"],
+button[kind="header"] { display: none !important; }
 
 .block-container {
     padding: 0.5rem 2.5rem 2rem !important;
@@ -620,16 +623,18 @@ div.css-ocqkz7,
     background:   var(--success-dim) !important;
 }
 
-/* ── BOTÓN CERRAR SESIÓN SIDEBAR (azul) ── */
-[data-testid="stSidebar"] .stButton > button {
-    background:  #1d4ed8 !important;
-    color:       #ffffff !important;
-    border:      none !important;
-    box-shadow:  0 0 12px rgba(29,78,216,0.3) !important;
+/* ── BOTÓN CERRAR SESIÓN (azul, topbar izquierda) ── */
+div[data-testid="column"]:first-child .stButton > button {
+    background:   #1d4ed8 !important;
+    color:        #ffffff !important;
+    border:       none !important;
+    box-shadow:   0 0 14px rgba(29,78,216,0.35) !important;
+    font-size:    0.68rem !important;
+    letter-spacing: 0.1em !important;
 }
-[data-testid="stSidebar"] .stButton > button:hover {
+div[data-testid="column"]:first-child .stButton > button:hover {
     background:  #2563eb !important;
-    box-shadow:  0 0 20px rgba(37,99,235,0.5) !important;
+    box-shadow:  0 0 22px rgba(37,99,235,0.55) !important;
     transform:   translateY(-1px) !important;
 }
 
@@ -790,54 +795,18 @@ def pagina_principal() -> None:
     usuario = st.session_state.usuario_activo
     admin   = es_admin(usuario)
 
-    # ── SIDEBAR — info + botón logout fijo abajo ──
-    with st.sidebar:
-        st.markdown(f"""
-        <div style="font-size:0.58rem;letter-spacing:0.12em;text-transform:uppercase;
-                    color:#8b95a8;margin-bottom:0.35rem">Sesión activa</div>
-        <div style="font-size:0.95rem;color:#f59e0b;font-weight:600;
-                    margin-bottom:1.2rem">{usuario}</div>
-        """, unsafe_allow_html=True)
+    arch  = st.session_state.archivos_subidos
+    n_bak = sum(1 for n, d in arch.items() if validate_file(n, d)[1] == "bak")
+    n_dat = sum(1 for n, d in arch.items() if validate_file(n, d)[1] == "dat")
+    n_zip = sum(1 for n, d in arch.items() if validate_file(n, d)[1] == "zip")
+    n_rar = sum(1 for n, d in arch.items() if validate_file(n, d)[1] == "rar")
 
-        arch  = st.session_state.archivos_subidos
-        n_bak = sum(1 for n, d in arch.items() if validate_file(n, d)[1] == "bak")
-        n_dat = sum(1 for n, d in arch.items() if validate_file(n, d)[1] == "dat")
-        n_zip = sum(1 for n, d in arch.items() if validate_file(n, d)[1] == "zip")
-        n_rar = sum(1 for n, d in arch.items() if validate_file(n, d)[1] == "rar")
+    # ── TOPBAR: [Botón Cerrar Sesión] [Marca] [Usuario · Hora] ──
+    ts = datetime.now().strftime("%Y-%m-%d  %H:%M")
+    col_btn, col_brand, col_status = st.columns([1.4, 3, 2])
 
-        st.markdown(f"""
-        <div style="font-size:0.58rem;letter-spacing:0.1em;text-transform:uppercase;
-                    color:#8b95a8;margin-bottom:0.7rem">Cola de archivos</div>
-        <div style="display:flex;flex-direction:column;gap:0.32rem">
-            <div style="display:flex;justify-content:space-between;font-size:0.78rem">
-                <span style="color:#3b82f6">BAK</span><span>{n_bak}</span>
-            </div>
-            <div style="display:flex;justify-content:space-between;font-size:0.78rem">
-                <span style="color:#f59e0b">DAT</span><span>{n_dat}</span>
-            </div>
-            <div style="display:flex;justify-content:space-between;font-size:0.78rem">
-                <span style="color:#8b5cf6">ZIP</span><span>{n_zip}</span>
-            </div>
-            <div style="display:flex;justify-content:space-between;font-size:0.78rem">
-                <span style="color:#ec4899">RAR</span><span>{n_rar}</span>
-            </div>
-            <div style="display:flex;justify-content:space-between;font-size:0.78rem;
-                        border-top:1px solid #2a3040;padding-top:0.32rem;margin-top:0.12rem">
-                <span style="color:#8b95a8">TOTAL</span>
-                <span>{len(arch)}</span>
-            </div>
-        </div>""", unsafe_allow_html=True)
-
-        # Espaciador que empuja el botón hacia abajo
-        st.markdown(
-            '<div style="flex:1;min-height:60vh"></div>',
-            unsafe_allow_html=True,
-        )
-
-        st.markdown('<div style="height:1px;background:#2a3040;margin:1rem 0 0.8rem"></div>',
-                    unsafe_allow_html=True)
-
-        if st.button("⏻  CERRAR SESIÓN", key="btn_logout_sidebar", use_container_width=True):
+    with col_btn:
+        if st.button("⏻  CERRAR SESIÓN", key="btn_logout", use_container_width=True):
             registrar_log(usuario, "LOGOUT", "Cierre de sesión")
             st.session_state.logged_in          = False
             st.session_state.usuario_activo     = None
@@ -845,22 +814,30 @@ def pagina_principal() -> None:
             st.session_state.resultados_proceso = []
             st.rerun()
 
-    # ── TOPBAR (solo marca + estado, sin botón) ──
-    ts = datetime.now().strftime("%Y-%m-%d  %H:%M")
-    st.markdown(f"""
-    <div style="display:flex;align-items:center;justify-content:space-between;
-                border-bottom:1px solid #2a3040;padding-bottom:1rem;margin-bottom:1.8rem">
-        <div style="font-family:var(--font-mono);font-size:0.68rem;font-weight:600;
-                    letter-spacing:0.22em;text-transform:uppercase;color:#f59e0b">
-            ▶ BACKUP CENTRAL / TRC SYSTEM
-        </div>
-        <div style="display:flex;align-items:center;gap:0.5rem;
-                    font-family:var(--font-mono);font-size:0.63rem;color:#8b95a8">
-            <div style="width:6px;height:6px;border-radius:50%;background:#10b981;
-                        box-shadow:0 0 6px #10b981"></div>
-            {usuario.upper()} &nbsp;·&nbsp; {ts}
-        </div>
-    </div>""", unsafe_allow_html=True)
+    with col_brand:
+        st.markdown(
+            '<div style="font-family:\'IBM Plex Mono\',monospace;font-size:0.68rem;'
+            'font-weight:600;letter-spacing:0.22em;text-transform:uppercase;color:#f59e0b;'
+            'display:flex;align-items:center;height:38px">'
+            '▶ BACKUP CENTRAL / TRC SYSTEM</div>',
+            unsafe_allow_html=True,
+        )
+
+    with col_status:
+        st.markdown(
+            f'<div style="font-family:\'IBM Plex Mono\',monospace;font-size:0.63rem;'
+            f'color:#8b95a8;display:flex;align-items:center;justify-content:flex-end;'
+            f'height:38px;gap:0.5rem">'
+            f'<span style="width:7px;height:7px;border-radius:50%;background:#10b981;'
+            f'box-shadow:0 0 6px #10b981;display:inline-block"></span>'
+            f'{usuario.upper()} &nbsp;·&nbsp; {ts}</div>',
+            unsafe_allow_html=True,
+        )
+
+    st.markdown(
+        '<div style="height:1px;background:#2a3040;margin:0.4rem 0 1.6rem"></div>',
+        unsafe_allow_html=True,
+    )
 
     # ── LOGO PRINCIPAL ──
     if os.path.exists(CONFIG.logo_path):
@@ -869,43 +846,35 @@ def pagina_principal() -> None:
             st.image(CONFIG.logo_path, use_container_width=True)
         st.markdown("<br>", unsafe_allow_html=True)
 
+    # ── COLA RESUMEN (en topbar secundario) ──
+    st.markdown(f"""
+    <div style="display:flex;gap:1.5rem;margin-bottom:1.5rem;
+                font-family:'IBM Plex Mono',monospace;font-size:0.7rem">
+        <span style="color:#8b95a8">COLA:</span>
+        <span style="color:#3b82f6">BAK&nbsp;<b>{n_bak}</b></span>
+        <span style="color:#f59e0b">DAT&nbsp;<b>{n_dat}</b></span>
+        <span style="color:#8b5cf6">ZIP&nbsp;<b>{n_zip}</b></span>
+        <span style="color:#ec4899">RAR&nbsp;<b>{n_rar}</b></span>
+        <span style="color:#8b95a8">TOTAL&nbsp;<b>{len(arch)}</b></span>
+    </div>""", unsafe_allow_html=True)
+
     # ════════════════════════════
     # 01 — SUBIR ARCHIVOS
     # ════════════════════════════
     render_section_header("SUBIR ARCHIVOS", "01")
 
-    # JS que elimina el nodo duplicado del ícono en runtime
-    st.markdown("""
-    <script>
-    (function removeDuplicateUploadIcon() {
-        function clean() {
-            document.querySelectorAll('[data-testid="stFileUploaderDropzoneInstructions"]')
-                .forEach(el => {
-                    const spans = el.querySelectorAll('span');
-                    // Streamlit renderiza 2 spans: ícono + texto; ocultar el primero (ícono SVG text)
-                    if (spans.length >= 2) spans[0].style.display = 'none';
-                });
-            document.querySelectorAll('[data-testid="stFileUploaderDropzone"] svg')
-                .forEach(svg => svg.style.display = 'none');
-        }
-        clean();
-        new MutationObserver(clean).observe(document.body, {childList:true, subtree:true});
-    })();
-    </script>
-    """, unsafe_allow_html=True)
-
     uploaded = st.file_uploader(
-        "ARRASTRE O SELECCIONE  ·  .BAK / .DAT / .ZIP / .RAR",
+        "Arrastre o seleccione archivos  ·  .BAK / .DAT / .ZIP / .RAR",
         type=["bak", "dat", "zip", "rar"],
         accept_multiple_files=True,
         label_visibility="visible",
     )
     if uploaded:
-        nuevos = sum(
-            1 for f in uploaded
-            if f.name not in st.session_state.archivos_subidos
-            and not st.session_state.archivos_subidos.update({f.name: f.getvalue()})  # type: ignore
-        )
+        nuevos = 0
+        for f in uploaded:
+            if f.name not in st.session_state.archivos_subidos:
+                st.session_state.archivos_subidos[f.name] = f.getvalue()
+                nuevos += 1
         if nuevos:
             st.success(f"✓  {nuevos} archivo(s) nuevo(s) agregado(s).")
 
@@ -1170,7 +1139,7 @@ st.set_page_config(
     page_title="Backup Central | TRC",
     page_icon="📦",
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="collapsed",
 )
 st.markdown(CSS, unsafe_allow_html=True)
 init_session()
