@@ -570,6 +570,31 @@ div.css-ocqkz7,
     background:   var(--success-dim) !important;
 }
 
+/* ── BOTÓN CERRAR SESIÓN (azul, topbar) ── */
+[data-testid="stButton"] button[kind="primary"]#btn_logout_top,
+div:has(> [data-testid="stButton"] > button[key="btn_logout_top"]) button,
+button[key="btn_logout_top"] {
+    background: #1d4ed8 !important;
+    color: #fff !important;
+    box-shadow: 0 0 14px rgba(29,78,216,0.35) !important;
+}
+button[key="btn_logout_top"]:hover {
+    background: #2563eb !important;
+    box-shadow: 0 0 22px rgba(37,99,235,0.5) !important;
+}
+
+/* Selector más robusto: primer botón del bloque principal antes del topbar */
+.block-container > div:first-child .stButton > button {
+    background:  #1d4ed8 !important;
+    color:       #ffffff !important;
+    box-shadow:  0 0 14px rgba(29,78,216,0.3) !important;
+}
+.block-container > div:first-child .stButton > button:hover {
+    background:  #2563eb !important;
+    box-shadow:  0 0 22px rgba(37,99,235,0.5) !important;
+    transform:   translateY(-1px) !important;
+}
+
 /* ── PROGRESS ── */
 .stProgress > div > div { background: var(--accent) !important; }
 .stSpinner > div        { border-top-color: var(--accent) !important; }
@@ -713,7 +738,7 @@ def pagina_principal() -> None:
     usuario = st.session_state.usuario_activo
     admin   = es_admin(usuario)
 
-    # ── SIDEBAR ──
+    # ── SIDEBAR — solo info, el logout está en el topbar ──
     with st.sidebar:
         st.markdown(f"""
         <div style="font-size:0.58rem;letter-spacing:0.12em;text-transform:uppercase;
@@ -721,16 +746,6 @@ def pagina_principal() -> None:
         <div style="font-size:0.95rem;color:#f59e0b;font-weight:600;
                     margin-bottom:1.2rem">{usuario}</div>
         """, unsafe_allow_html=True)
-
-        if st.button("CERRAR SESIÓN", key="btn_logout", use_container_width=True):
-            registrar_log(usuario, "LOGOUT", "Cierre manual de sesión")
-            st.session_state.logged_in          = False
-            st.session_state.usuario_activo     = None
-            st.session_state.archivos_subidos   = {}
-            st.session_state.resultados_proceso = []
-            st.rerun()
-
-        st.markdown("<br>", unsafe_allow_html=True)
 
         arch  = st.session_state.archivos_subidos
         n_bak = sum(1 for n, d in arch.items() if validate_file(n, d)[1] == "bak")
@@ -753,8 +768,39 @@ def pagina_principal() -> None:
             </div>
         </div>""", unsafe_allow_html=True)
 
-    # ── TOPBAR ──
-    render_topbar(usuario)
+    # ── TOPBAR con botón cerrar sesión arriba a la izquierda ──
+    col_logout, col_brand, col_status = st.columns([1, 3, 1.5])
+    with col_logout:
+        if st.button("⏻  CERRAR SESIÓN", key="btn_logout_top", use_container_width=True):
+            registrar_log(usuario, "LOGOUT", "Cierre desde topbar")
+            st.session_state.logged_in          = False
+            st.session_state.usuario_activo     = None
+            st.session_state.archivos_subidos   = {}
+            st.session_state.resultados_proceso = []
+            st.rerun()
+
+    ts = datetime.now().strftime("%Y-%m-%d  %H:%M")
+    with col_brand:
+        st.markdown(
+            '<div style="display:flex;align-items:center;height:100%;'
+            'font-family:var(--font-mono);font-size:0.68rem;font-weight:600;'
+            'letter-spacing:0.22em;text-transform:uppercase;color:var(--accent)">'
+            '▶ BACKUP CENTRAL / TRC SYSTEM</div>',
+            unsafe_allow_html=True,
+        )
+    with col_status:
+        st.markdown(
+            f'<div style="display:flex;align-items:center;justify-content:flex-end;'
+            f'height:100%;gap:0.5rem;font-family:var(--font-mono);font-size:0.63rem;'
+            f'color:#8b95a8">'
+            f'<div style="width:6px;height:6px;border-radius:50%;background:#10b981;'
+            f'box-shadow:0 0 6px #10b981"></div>'
+            f'{usuario.upper()} &nbsp;·&nbsp; {ts}</div>',
+            unsafe_allow_html=True,
+        )
+
+    st.markdown('<div style="height:1px;background:#2a3040;margin-bottom:1.8rem"></div>',
+                unsafe_allow_html=True)
 
     # ── LOGO PRINCIPAL ──
     if os.path.exists(CONFIG.logo_path):
