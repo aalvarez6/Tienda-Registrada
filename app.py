@@ -509,7 +509,7 @@ div.css-ocqkz7,
     transform:    none !important;
 }
 
-/* ── FILE UPLOADER ── */
+/* ── FILE UPLOADER — fix doble ícono ── */
 [data-testid="stFileUploader"] section,
 [data-testid="stFileUploader"] > div {
     background:    var(--bg-card) !important;
@@ -517,13 +517,39 @@ div.css-ocqkz7,
     border-radius: var(--radius) !important;
     transition:    border-color 0.18s !important;
 }
-[data-testid="stFileUploader"] section:hover { border-color: var(--accent) !important; }
+[data-testid="stFileUploader"] section:hover {
+    border-color: var(--accent) !important;
+}
+/* Ocultar TODOS los spans y svgs dentro del dropzone (causa del doble texto) */
+[data-testid="stFileUploaderDropzoneInstructions"] > div > span,
+[data-testid="stFileUploaderDropzoneInstructions"] > div > span + span,
+[data-testid="stFileUploaderDropzoneInstructions"] span:not(:first-of-type),
+[data-testid="stFileUploaderDropzone"] svg { display: none !important; }
+/* Mantener solo el primer span visible y estilizado */
+[data-testid="stFileUploaderDropzoneInstructions"] > div > span:first-of-type {
+    display: block !important;
+    font-family: var(--font-avenir) !important;
+    font-size: 0.82rem !important;
+    color: var(--text-secondary) !important;
+}
 [data-testid="stFileUploader"] label {
+    font-family:    var(--font-avenir) !important;
+    font-size:      0.68rem !important;
+    letter-spacing: 0.08em !important;
+    text-transform: uppercase !important;
+    color:          var(--text-secondary) !important;
+}
+[data-testid="stFileUploader"] button[data-testid="baseButton-secondary"] {
     font-family:   var(--font-avenir) !important;
-    font-size:     0.68rem !important;
-    letter-spacing:0.08em !important;
-    text-transform:uppercase !important;
+    background:    transparent !important;
+    border:        1px solid var(--border-light) !important;
     color:         var(--text-secondary) !important;
+    border-radius: var(--radius) !important;
+    font-size:     0.72rem !important;
+}
+[data-testid="stFileUploader"] button[data-testid="baseButton-secondary"]:hover {
+    border-color: var(--accent) !important;
+    color:        var(--accent) !important;
 }
 
 /* ── CHECKBOXES ── */
@@ -592,36 +618,6 @@ div.css-ocqkz7,
     border-color: var(--success) !important;
     color:        var(--success) !important;
     background:   var(--success-dim) !important;
-}
-
-/* ── FIX: doble ícono "upload" en file uploader ── */
-[data-testid="stFileUploader"] [data-testid="stFileUploaderDropzoneInstructions"] div span {
-    display: none !important;
-}
-[data-testid="stFileUploader"] [data-testid="stFileUploaderDropzoneInstructions"]::before {
-    content: "⬆  Arrastre archivos aquí o haga clic para seleccionar";
-    font-family: var(--font-avenir) !important;
-    font-size: 0.8rem !important;
-    color: var(--text-secondary) !important;
-    letter-spacing: 0.04em !important;
-}
-/* Ocultar el SVG/ícono que se duplica */
-[data-testid="stFileUploaderDropzone"] svg,
-[data-testid="stFileUploaderDropzone"] img.upload-icon,
-[data-testid="stFileUploader"] section > div > div:first-child > div:first-child {
-    display: none !important;
-}
-[data-testid="stFileUploader"] button {
-    font-family: var(--font-avenir) !important;
-    font-size: 0.72rem !important;
-    background: transparent !important;
-    border: 1px solid var(--border-light) !important;
-    color: var(--text-secondary) !important;
-    border-radius: var(--radius) !important;
-}
-[data-testid="stFileUploader"] button:hover {
-    border-color: var(--accent) !important;
-    color: var(--accent) !important;
 }
 
 /* ── BOTÓN CERRAR SESIÓN SIDEBAR (azul) ── */
@@ -878,10 +874,31 @@ def pagina_principal() -> None:
     # ════════════════════════════
     render_section_header("SUBIR ARCHIVOS", "01")
 
+    # JS que elimina el nodo duplicado del ícono en runtime
+    st.markdown("""
+    <script>
+    (function removeDuplicateUploadIcon() {
+        function clean() {
+            document.querySelectorAll('[data-testid="stFileUploaderDropzoneInstructions"]')
+                .forEach(el => {
+                    const spans = el.querySelectorAll('span');
+                    // Streamlit renderiza 2 spans: ícono + texto; ocultar el primero (ícono SVG text)
+                    if (spans.length >= 2) spans[0].style.display = 'none';
+                });
+            document.querySelectorAll('[data-testid="stFileUploaderDropzone"] svg')
+                .forEach(svg => svg.style.display = 'none');
+        }
+        clean();
+        new MutationObserver(clean).observe(document.body, {childList:true, subtree:true});
+    })();
+    </script>
+    """, unsafe_allow_html=True)
+
     uploaded = st.file_uploader(
-        "Arrastre o seleccione archivos (.bak / .dat / .zip / .rar)",
+        "ARRASTRE O SELECCIONE  ·  .BAK / .DAT / .ZIP / .RAR",
         type=["bak", "dat", "zip", "rar"],
         accept_multiple_files=True,
+        label_visibility="visible",
     )
     if uploaded:
         nuevos = sum(
@@ -1153,7 +1170,7 @@ st.set_page_config(
     page_title="Backup Central | TRC",
     page_icon="📦",
     layout="wide",
-    initial_sidebar_state="collapsed",
+    initial_sidebar_state="expanded",
 )
 st.markdown(CSS, unsafe_allow_html=True)
 init_session()
