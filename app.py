@@ -28,7 +28,7 @@ class AppConfig:
     log_path:      Path = Path("./data/logs")
     csv_path:      Path = Path("./data/csv")
     excel_reporte: Path = Path("./data/reporte_actividad.xlsx")
-    tipos_validos: tuple = (".bak", ".dat")
+    tipos_validos: tuple = (".bak", ".dat", ".zip", ".rar")
     logo_path:     str  = "LogoBlack.jpeg"
 
 CONFIG = AppConfig()
@@ -41,6 +41,8 @@ def init_directories() -> None:
     for d in [
         CONFIG.backup_path / "bak",
         CONFIG.backup_path / "dat",
+        CONFIG.backup_path / "zip",
+        CONFIG.backup_path / "rar",
         CONFIG.log_path,
         CONFIG.csv_path,
         CONFIG.excel_reporte.parent,
@@ -101,16 +103,36 @@ def process_dat(ruta: Path, usuario: str) -> dict:
     return {"tipo": "DAT", "estado": "OK", "ruta": str(ruta)}
 
 
-def actualizar_reporte_excel(usuario: str, total: int, cant_bak: int, cant_dat: int) -> None:
+def process_zip(ruta: Path, usuario: str) -> dict:
+    registrar_log(usuario, "ZIP_EXTRACT", str(ruta))
+    return {"tipo": "ZIP", "estado": "OK", "ruta": str(ruta)}
+
+
+def process_rar(ruta: Path, usuario: str) -> dict:
+    registrar_log(usuario, "RAR_EXTRACT", str(ruta))
+    return {"tipo": "RAR", "estado": "OK", "ruta": str(ruta)}
+
+
+def actualizar_reporte_excel(
+    usuario: str, total: int,
+    cant_bak: int, cant_dat: int,
+    cant_zip: int, cant_rar: int
+) -> None:
     nueva_fila = pd.DataFrame([{
         "Fecha":         datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "Usuario":       usuario,
         "Total_Subidos": total,
         "Cantidad_BAK":  cant_bak,
         "Cantidad_DAT":  cant_dat,
+        "Cantidad_ZIP":  cant_zip,
+        "Cantidad_RAR":  cant_rar,
     }])
     if CONFIG.excel_reporte.exists():
         df_prev = pd.read_excel(CONFIG.excel_reporte, engine="openpyxl")
+        # Asegurar columnas nuevas en reportes anteriores
+        for col, default in [("Cantidad_ZIP", 0), ("Cantidad_RAR", 0)]:
+            if col not in df_prev.columns:
+                df_prev[col] = default
         df_nuevo = pd.concat([df_prev, nueva_fila], ignore_index=True)
     else:
         df_nuevo = nueva_fila
@@ -396,6 +418,8 @@ div.css-ocqkz7,
 }
 .badge-bak   { background: var(--info-dim);    color: var(--info);   border: 1px solid var(--info); }
 .badge-dat   { background: var(--accent-glow); color: var(--accent); border: 1px solid var(--accent-dim); }
+.badge-zip   { background: rgba(139,92,246,0.12); color: #8b5cf6;   border: 1px solid #6d28d9; }
+.badge-rar   { background: rgba(236,72,153,0.12); color: #ec4899;   border: 1px solid #be185d; }
 .badge-error { background: var(--error-dim);   color: var(--error);  border: 1px solid var(--error); }
 
 /* ── LOGIN ── */
@@ -570,29 +594,61 @@ div.css-ocqkz7,
     background:   var(--success-dim) !important;
 }
 
-/* ── BOTÓN CERRAR SESIÓN (azul, topbar) ── */
-[data-testid="stButton"] button[kind="primary"]#btn_logout_top,
-div:has(> [data-testid="stButton"] > button[key="btn_logout_top"]) button,
-button[key="btn_logout_top"] {
-    background: #1d4ed8 !important;
-    color: #fff !important;
-    box-shadow: 0 0 14px rgba(29,78,216,0.35) !important;
+/* ── FIX: doble ícono "upload" en file uploader ── */
+[data-testid="stFileUploader"] [data-testid="stFileUploaderDropzoneInstructions"] div span {
+    display: none !important;
 }
-button[key="btn_logout_top"]:hover {
-    background: #2563eb !important;
-    box-shadow: 0 0 22px rgba(37,99,235,0.5) !important;
+[data-testid="stFileUploader"] [data-testid="stFileUploaderDropzoneInstructions"]::before {
+    content: "⬆  Arrastre archivos aquí o haga clic para seleccionar";
+    font-family: var(--font-avenir) !important;
+    font-size: 0.8rem !important;
+    color: var(--text-secondary) !important;
+    letter-spacing: 0.04em !important;
+}
+/* Ocultar el SVG/ícono que se duplica */
+[data-testid="stFileUploaderDropzone"] svg,
+[data-testid="stFileUploaderDropzone"] img.upload-icon,
+[data-testid="stFileUploader"] section > div > div:first-child > div:first-child {
+    display: none !important;
+}
+[data-testid="stFileUploader"] button {
+    font-family: var(--font-avenir) !important;
+    font-size: 0.72rem !important;
+    background: transparent !important;
+    border: 1px solid var(--border-light) !important;
+    color: var(--text-secondary) !important;
+    border-radius: var(--radius) !important;
+}
+[data-testid="stFileUploader"] button:hover {
+    border-color: var(--accent) !important;
+    color: var(--accent) !important;
 }
 
-/* Selector más robusto: primer botón del bloque principal antes del topbar */
-.block-container > div:first-child .stButton > button {
+/* ── BOTÓN CERRAR SESIÓN SIDEBAR (azul) ── */
+[data-testid="stSidebar"] .stButton > button {
     background:  #1d4ed8 !important;
     color:       #ffffff !important;
-    box-shadow:  0 0 14px rgba(29,78,216,0.3) !important;
+    border:      none !important;
+    box-shadow:  0 0 12px rgba(29,78,216,0.3) !important;
 }
-.block-container > div:first-child .stButton > button:hover {
+[data-testid="stSidebar"] .stButton > button:hover {
     background:  #2563eb !important;
-    box-shadow:  0 0 22px rgba(37,99,235,0.5) !important;
+    box-shadow:  0 0 20px rgba(37,99,235,0.5) !important;
     transform:   translateY(-1px) !important;
+}
+
+/* ── SIDEBAR layout: flex column para pegar botón al fondo ── */
+[data-testid="stSidebar"] > div:first-child {
+    display: flex !important;
+    flex-direction: column !important;
+    height: 100vh !important;
+    padding-bottom: 1.5rem !important;
+}
+[data-testid="stSidebar"] .block-container {
+    flex: 1 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    padding: 1.5rem 1rem !important;
 }
 
 /* ── PROGRESS ── */
@@ -738,7 +794,7 @@ def pagina_principal() -> None:
     usuario = st.session_state.usuario_activo
     admin   = es_admin(usuario)
 
-    # ── SIDEBAR — solo info, el logout está en el topbar ──
+    # ── SIDEBAR — info + botón logout fijo abajo ──
     with st.sidebar:
         st.markdown(f"""
         <div style="font-size:0.58rem;letter-spacing:0.12em;text-transform:uppercase;
@@ -750,6 +806,8 @@ def pagina_principal() -> None:
         arch  = st.session_state.archivos_subidos
         n_bak = sum(1 for n, d in arch.items() if validate_file(n, d)[1] == "bak")
         n_dat = sum(1 for n, d in arch.items() if validate_file(n, d)[1] == "dat")
+        n_zip = sum(1 for n, d in arch.items() if validate_file(n, d)[1] == "zip")
+        n_rar = sum(1 for n, d in arch.items() if validate_file(n, d)[1] == "rar")
 
         st.markdown(f"""
         <div style="font-size:0.58rem;letter-spacing:0.1em;text-transform:uppercase;
@@ -761,6 +819,12 @@ def pagina_principal() -> None:
             <div style="display:flex;justify-content:space-between;font-size:0.78rem">
                 <span style="color:#f59e0b">DAT</span><span>{n_dat}</span>
             </div>
+            <div style="display:flex;justify-content:space-between;font-size:0.78rem">
+                <span style="color:#8b5cf6">ZIP</span><span>{n_zip}</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;font-size:0.78rem">
+                <span style="color:#ec4899">RAR</span><span>{n_rar}</span>
+            </div>
             <div style="display:flex;justify-content:space-between;font-size:0.78rem;
                         border-top:1px solid #2a3040;padding-top:0.32rem;margin-top:0.12rem">
                 <span style="color:#8b95a8">TOTAL</span>
@@ -768,39 +832,39 @@ def pagina_principal() -> None:
             </div>
         </div>""", unsafe_allow_html=True)
 
-    # ── TOPBAR con botón cerrar sesión arriba a la izquierda ──
-    col_logout, col_brand, col_status = st.columns([1, 3, 1.5])
-    with col_logout:
-        if st.button("⏻  CERRAR SESIÓN", key="btn_logout_top", use_container_width=True):
-            registrar_log(usuario, "LOGOUT", "Cierre desde topbar")
+        # Espaciador que empuja el botón hacia abajo
+        st.markdown(
+            '<div style="flex:1;min-height:60vh"></div>',
+            unsafe_allow_html=True,
+        )
+
+        st.markdown('<div style="height:1px;background:#2a3040;margin:1rem 0 0.8rem"></div>',
+                    unsafe_allow_html=True)
+
+        if st.button("⏻  CERRAR SESIÓN", key="btn_logout_sidebar", use_container_width=True):
+            registrar_log(usuario, "LOGOUT", "Cierre de sesión")
             st.session_state.logged_in          = False
             st.session_state.usuario_activo     = None
             st.session_state.archivos_subidos   = {}
             st.session_state.resultados_proceso = []
             st.rerun()
 
+    # ── TOPBAR (solo marca + estado, sin botón) ──
     ts = datetime.now().strftime("%Y-%m-%d  %H:%M")
-    with col_brand:
-        st.markdown(
-            '<div style="display:flex;align-items:center;height:100%;'
-            'font-family:var(--font-mono);font-size:0.68rem;font-weight:600;'
-            'letter-spacing:0.22em;text-transform:uppercase;color:var(--accent)">'
-            '▶ BACKUP CENTRAL / TRC SYSTEM</div>',
-            unsafe_allow_html=True,
-        )
-    with col_status:
-        st.markdown(
-            f'<div style="display:flex;align-items:center;justify-content:flex-end;'
-            f'height:100%;gap:0.5rem;font-family:var(--font-mono);font-size:0.63rem;'
-            f'color:#8b95a8">'
-            f'<div style="width:6px;height:6px;border-radius:50%;background:#10b981;'
-            f'box-shadow:0 0 6px #10b981"></div>'
-            f'{usuario.upper()} &nbsp;·&nbsp; {ts}</div>',
-            unsafe_allow_html=True,
-        )
-
-    st.markdown('<div style="height:1px;background:#2a3040;margin-bottom:1.8rem"></div>',
-                unsafe_allow_html=True)
+    st.markdown(f"""
+    <div style="display:flex;align-items:center;justify-content:space-between;
+                border-bottom:1px solid #2a3040;padding-bottom:1rem;margin-bottom:1.8rem">
+        <div style="font-family:var(--font-mono);font-size:0.68rem;font-weight:600;
+                    letter-spacing:0.22em;text-transform:uppercase;color:#f59e0b">
+            ▶ BACKUP CENTRAL / TRC SYSTEM
+        </div>
+        <div style="display:flex;align-items:center;gap:0.5rem;
+                    font-family:var(--font-mono);font-size:0.63rem;color:#8b95a8">
+            <div style="width:6px;height:6px;border-radius:50%;background:#10b981;
+                        box-shadow:0 0 6px #10b981"></div>
+            {usuario.upper()} &nbsp;·&nbsp; {ts}
+        </div>
+    </div>""", unsafe_allow_html=True)
 
     # ── LOGO PRINCIPAL ──
     if os.path.exists(CONFIG.logo_path):
@@ -815,8 +879,8 @@ def pagina_principal() -> None:
     render_section_header("SUBIR ARCHIVOS", "01")
 
     uploaded = st.file_uploader(
-        "Arrastre o seleccione archivos (.bak / .dat)",
-        type=["bak", "dat"],
+        "Arrastre o seleccione archivos (.bak / .dat / .zip / .rar)",
+        type=["bak", "dat", "zip", "rar"],
         accept_multiple_files=True,
     )
     if uploaded:
@@ -840,6 +904,8 @@ def pagina_principal() -> None:
 
         n_bak    = sum(1 for n, d in arch.items() if validate_file(n, d)[1] == "bak")
         n_dat    = sum(1 for n, d in arch.items() if validate_file(n, d)[1] == "dat")
+        n_zip    = sum(1 for n, d in arch.items() if validate_file(n, d)[1] == "zip")
+        n_rar    = sum(1 for n, d in arch.items() if validate_file(n, d)[1] == "rar")
         n_err    = sum(1 for n, d in arch.items() if not validate_file(n, d)[0])
         total_kb = round(sum(len(d) for d in arch.values()) / 1024, 1)
 
@@ -847,6 +913,8 @@ def pagina_principal() -> None:
             {"label": "Total",         "value": len(arch)},
             {"label": "BAK (SQL)",     "value": n_bak},
             {"label": "DAT",           "value": n_dat},
+            {"label": "ZIP",           "value": n_zip},
+            {"label": "RAR",           "value": n_rar},
             {"label": "No soportados", "value": n_err, "color": "red" if n_err else ""},
             {"label": "Tamaño total",  "value": f"{total_kb} KB"},
         ])
@@ -885,7 +953,7 @@ def pagina_principal() -> None:
             else:
                 resultados: list = []
                 prog       = st.progress(0)
-                contadores = {"bak": 0, "dat": 0, "error": 0}
+                contadores = {"bak": 0, "dat": 0, "zip": 0, "rar": 0, "error": 0}
 
                 with st.spinner(f"Procesando {len(a_proc)} archivo(s)…"):
                     for i, nombre in enumerate(a_proc):
@@ -898,14 +966,22 @@ def pagina_principal() -> None:
                             ruta = guardar_archivo(nombre, datos, tipo, usuario)
                             if tipo == "bak":
                                 process_bak(ruta, usuario); contadores["bak"] += 1
-                            else:
+                            elif tipo == "dat":
                                 process_dat(ruta, usuario); contadores["dat"] += 1
+                            elif tipo == "zip":
+                                process_zip(ruta, usuario); contadores["zip"] += 1
+                            elif tipo == "rar":
+                                process_rar(ruta, usuario); contadores["rar"] += 1
                             resultados.append({"archivo": nombre, "estado": "OK", "detalle": str(ruta)})
                         prog.progress((i + 1) / len(a_proc))
 
-                total_ok = contadores["bak"] + contadores["dat"]
+                total_ok = contadores["bak"] + contadores["dat"] + contadores["zip"] + contadores["rar"]
                 if total_ok:
-                    actualizar_reporte_excel(usuario, total_ok, contadores["bak"], contadores["dat"])
+                    actualizar_reporte_excel(
+                        usuario, total_ok,
+                        contadores["bak"], contadores["dat"],
+                        contadores["zip"], contadores["rar"]
+                    )
 
                 for r in resultados:
                     if r["estado"] == "OK":
@@ -943,6 +1019,8 @@ def pagina_principal() -> None:
         total_sesiones = len(df)
         total_bak      = int(df["Cantidad_BAK"].sum())
         total_dat      = int(df["Cantidad_DAT"].sum())
+        total_zip      = int(df["Cantidad_ZIP"].sum()) if "Cantidad_ZIP" in df.columns else 0
+        total_rar      = int(df["Cantidad_RAR"].sum()) if "Cantidad_RAR" in df.columns else 0
         total_archivos = int(df["Total_Subidos"].sum())
 
         df_sorted = df.sort_values("Fecha", ascending=False)
@@ -953,6 +1031,8 @@ def pagina_principal() -> None:
             f"<td style='text-align:right'>{int(row['Total_Subidos'])}</td>"
             f"<td style='text-align:right'>{int(row['Cantidad_BAK'])}</td>"
             f"<td style='text-align:right'>{int(row['Cantidad_DAT'])}</td>"
+            f"<td style='text-align:right'>{int(row.get('Cantidad_ZIP', 0))}</td>"
+            f"<td style='text-align:right'>{int(row.get('Cantidad_RAR', 0))}</td>"
             f"</tr>"
             for _, row in df_sorted.iterrows()
         )
@@ -960,23 +1040,22 @@ def pagina_principal() -> None:
         st.markdown(f"""
         <table class="file-table" style="margin-bottom:1.5rem">
           <thead>
-            <!-- Fila título -->
             <tr style="background:#1a1e28">
-              <th colspan="5"
+              <th colspan="7"
                   style="font-size:0.6rem;letter-spacing:0.15em;color:#f59e0b;
                          padding:0.65rem 0.75rem;border-bottom:2px solid #f59e0b;
                          text-transform:uppercase">
                 RESUMEN POR SESIÓN DE CARGA
               </th>
             </tr>
-            <!-- Fila etiquetas totales -->
             <tr style="background:#141720">
               <th>Sesiones registradas</th><th></th>
               <th style="text-align:right">Total archivos</th>
               <th style="text-align:right">BAK procesados</th>
               <th style="text-align:right">DAT procesados</th>
+              <th style="text-align:right">ZIP procesados</th>
+              <th style="text-align:right">RAR procesados</th>
             </tr>
-            <!-- Fila valores totales -->
             <tr style="background:#1a1e28;border-bottom:2px solid #2a3040">
               <td style="font-size:1.5rem;font-weight:700;color:#10b981;
                          font-family:var(--font-mono);padding:0.55rem 0.75rem">
@@ -984,27 +1063,33 @@ def pagina_principal() -> None:
               </td>
               <td></td>
               <td style="font-size:1.5rem;font-weight:700;color:#f59e0b;
-                         font-family:var(--font-mono);text-align:right;
-                         padding:0.55rem 0.75rem">
+                         font-family:var(--font-mono);text-align:right;padding:0.55rem 0.75rem">
                 {total_archivos}
               </td>
               <td style="font-size:1.5rem;font-weight:700;color:#3b82f6;
-                         font-family:var(--font-mono);text-align:right;
-                         padding:0.55rem 0.75rem">
+                         font-family:var(--font-mono);text-align:right;padding:0.55rem 0.75rem">
                 {total_bak}
               </td>
               <td style="font-size:1.5rem;font-weight:700;color:#f59e0b;
-                         font-family:var(--font-mono);text-align:right;
-                         padding:0.55rem 0.75rem">
+                         font-family:var(--font-mono);text-align:right;padding:0.55rem 0.75rem">
                 {total_dat}
               </td>
+              <td style="font-size:1.5rem;font-weight:700;color:#8b5cf6;
+                         font-family:var(--font-mono);text-align:right;padding:0.55rem 0.75rem">
+                {total_zip}
+              </td>
+              <td style="font-size:1.5rem;font-weight:700;color:#ec4899;
+                         font-family:var(--font-mono);text-align:right;padding:0.55rem 0.75rem">
+                {total_rar}
+              </td>
             </tr>
-            <!-- Encabezados detalle -->
             <tr>
               <th>Fecha</th><th>Usuario</th>
               <th style="text-align:right">Total subidos</th>
               <th style="text-align:right">BAK</th>
               <th style="text-align:right">DAT</th>
+              <th style="text-align:right">ZIP</th>
+              <th style="text-align:right">RAR</th>
             </tr>
           </thead>
           <tbody>
