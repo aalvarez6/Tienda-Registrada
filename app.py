@@ -24,9 +24,6 @@ class AppConfig:
         "Admin", "Captura1", "Captura2", "Captura3", "Captura4",
         "Captura5", "Captura6", "Captura7", "Captura8", "Captura9", "Captura10"
     ])
-    contrasena_hash: str = field(
-        default_factory=lambda: hashlib.sha256("TRC1234".encode()).hexdigest()
-    )
     backup_path:   Path = Path("./backups")
     log_path:      Path = Path("./data/logs")
     csv_path:      Path = Path("./data/csv")
@@ -66,7 +63,8 @@ def registrar_log(usuario: str, accion: str, detalle: str, estado: str = "OK") -
 
 def verificar_credenciales(usuario: str, contrasena: str) -> bool:
     hash_input = hashlib.sha256(contrasena.encode()).hexdigest()
-    return usuario in CONFIG.usuarios_validos and hash_input == CONFIG.contrasena_hash
+    hash_correcto = hashlib.sha256("TRC1234".encode()).hexdigest()
+    return usuario in CONFIG.usuarios_validos and hash_input == hash_correcto
 
 
 def es_admin(usuario: str) -> bool:
@@ -671,26 +669,28 @@ def init_session() -> None:
 
 def pagina_login() -> None:
     """
-    Login SIN st.form para evitar el rectángulo gris.
-    Los inputs usan session_state con key para persistencia.
+    Login sin st.form y sin divs wrapper que generan rectángulos vacíos.
+    El título y los inputs van directamente en la columna sin contenedores HTML intermedios.
     """
     col1, col2, col3 = st.columns([1, 1.4, 1])
     with col2:
-        # Logo
+        # Logo — sin margen extra debajo
         if os.path.exists(CONFIG.logo_path):
             st.image(CONFIG.logo_path, use_container_width=True)
 
-        # Caja login (div HTML puro, sin st.form)
-        st.markdown('<div class="login-box">', unsafe_allow_html=True)
+        # Título pegado al logo, sin ningún div contenedor
         st.markdown(
-            '<div class="login-title">&#9121; &nbsp; ACCESO RESTRINGIDO &nbsp; &#9121;</div>',
+            '<p style="font-family:var(--font-mono);font-size:0.62rem;font-weight:600;'
+            'letter-spacing:0.2em;text-transform:uppercase;color:var(--accent);'
+            'text-align:center;margin:0.9rem 0 1.2rem">&#9121; &nbsp;ACCESO RESTRINGIDO&nbsp; &#9121;</p>',
             unsafe_allow_html=True,
         )
 
         usuario    = st.text_input("Usuario",    key="li_user")
         contrasena = st.text_input("Contraseña", key="li_pass", type="password")
 
-        st.markdown('<div class="login-divider"></div>', unsafe_allow_html=True)
+        st.markdown('<div style="height:1px;background:#2a3040;margin:1rem 0 1.2rem"></div>',
+                    unsafe_allow_html=True)
 
         if st.button("INICIAR SESIÓN", use_container_width=True, key="btn_login"):
             if not usuario or not contrasena:
@@ -704,7 +704,6 @@ def pagina_login() -> None:
                 registrar_log(usuario, "LOGIN_FAIL", "Credenciales incorrectas", "ERROR")
                 st.error("Usuario o contraseña incorrectos.")
 
-        st.markdown('</div>', unsafe_allow_html=True)
 
 # ============================================================
 # PÁGINA: PRINCIPAL
